@@ -16,11 +16,14 @@ use Filament\Actions\ActionGroup;
 use Filament\Actions\Concerns\InteractsWithActions;
 use Filament\Actions\Contracts\HasActions;
 use Filament\Forms\Components\DatePicker;
+use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\TimePicker;
 use Filament\Forms\Components\Toggle;
+use Filament\Schemas\Components\Grid;
+use Filament\Schemas\Components\Section;
 use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Forms\Contracts\HasForms;
 use Filament\Notifications\Notification;
@@ -35,8 +38,6 @@ use Filament\Tables\Columns\ToggleColumn;
 use Filament\Tables\Concerns\InteractsWithTable;
 use Filament\Tables\Contracts\HasTable;
 use Filament\Tables\Table;
-
-use Filament\Schemas\Components\Grid;
 use Illuminate\Support\Str;
 
 class ScheduleCalendarPage extends Page implements HasActions, HasForms, HasTable
@@ -122,6 +123,12 @@ class ScheduleCalendarPage extends Page implements HasActions, HasForms, HasTabl
         $this->resetTable();
     }
 
+    public function updatedSelectedTemplateId($value): void
+    {
+        $this->selectedTemplateId = (int) $value;
+        $this->resetTable();
+    }
+
     public function toggleItemActive(int $itemId): void
     {
         $item = ScheduleTemplateItem::find($itemId);
@@ -161,29 +168,24 @@ class ScheduleCalendarPage extends Page implements HasActions, HasForms, HasTabl
                     ->with('program');
             })
             ->columns([
-                TextColumn::make('time_range')
-                    ->label('Saat')
-                    ->state(fn (ScheduleTemplateItem $record) => Carbon::parse($record->start_time)->format('H:i') . "\n" . ($record->end_time ? Carbon::parse($record->end_time)->format('H:i') : '—'))
-                    ->sortable(query: fn ($query, $direction) => $query->orderBy('start_time', $direction))
+                TextColumn::make('start_time')
+                    ->label('Başlangıç')
+                    ->state(fn (ScheduleTemplateItem $record) => $record->start_time ? Carbon::parse($record->start_time)->format('H:i') : '—')
+                    ->sortable()
                     ->weight(FontWeight::Bold)
-                    ->color('amber')
-                    ->extraAttributes(['class' => 'whitespace-pre-line text-center font-bold']),
+                    ->color('primary'),
 
-                ImageColumn::make('program.cover_image')
-                    ->label('Görsel')
-                    ->defaultImageUrl('https://dosttv.com/wp-content/uploads/2022/02/dost_logo.png')
-                    ->height('64px')
-                    ->width('112px')
-                    ->extraImgAttributes(['class' => 'object-cover rounded-lg border border-gray-700 shadow-sm']),
+                TextColumn::make('end_time')
+                    ->label('Bitiş')
+                    ->state(fn (ScheduleTemplateItem $record) => $record->end_time ? Carbon::parse($record->end_time)->format('H:i') : '—')
+                    ->sortable()
+                    ->color('gray'),
 
                 TextColumn::make('display_title')
-                    ->label('Program & Açıklama')
-                    ->description(fn (ScheduleTemplateItem $record) => $record->program?->description ? Str::limit(strip_tags(html_entity_decode($record->program->description, ENT_QUOTES | ENT_HTML5, 'UTF-8')), 110) : 'Kalpten çıkan, kalbe ulaşan program içeriği...')
+                    ->label('Program')
+                    ->description(fn (ScheduleTemplateItem $record) => $record->note ?: ($record->custom_title ?: null))
                     ->searchable(query: fn ($query, $search) => $query->whereHas('program', fn ($q) => $q->where('name', 'like', "%{$search}%")))
-                    ->weight(FontWeight::Bold)
-                    ->color('primary')
-                    ->url(fn (ScheduleTemplateItem $record) => $record->target_url)
-                    ->openUrlInNewTab(),
+                    ->weight(FontWeight::Bold),
 
                 TextColumn::make('type_badge')
                     ->label('Yayın Türü')
@@ -200,7 +202,7 @@ class ScheduleCalendarPage extends Page implements HasActions, HasForms, HasTabl
                     }),
 
                 ToggleColumn::make('is_active')
-                    ->label('Durum'),
+                    ->label('Aktif'),
             ])
             ->defaultSort('start_time', 'asc')
             ->recordActions([
@@ -208,6 +210,8 @@ class ScheduleCalendarPage extends Page implements HasActions, HasForms, HasTabl
                     ->label('Düzenle')
                     ->icon(Heroicon::OutlinedPencilSquare)
                     ->modalHeading('Yayın Kaydını Düzenle')
+                    ->modalSubmitActionLabel('Değişiklikleri Kaydet')
+                    ->modalCancelActionLabel('Vazgeç')
                     ->fillForm(fn (ScheduleTemplateItem $record): array => [
                         'program_id' => $record->program_id,
                         'day_of_week' => (int) $record->day_of_week,
@@ -217,47 +221,11 @@ class ScheduleCalendarPage extends Page implements HasActions, HasForms, HasTabl
                         'is_repeat' => (bool) $record->is_repeat,
                         'is_active' => (bool) $record->is_active,
                         'custom_title' => $record->custom_title,
+                        'image' => $record->image,
+                        'description' => $record->description,
                         'note' => $record->note,
                     ])
-                    ->schema([
-                        Select::make('program_id')
-                            ->label('Program')
-                            ->options(Program::pluck('name', 'id'))
-                            ->searchable()
-                            ->preload()
-                            ->required(),
-
-                        Select::make('day_of_week')
-                            ->label('Yayın Günü')
-                            ->options(Schedule::DAYS)
-                            ->required(),
-
-                        TimePicker::make('start_time')
-                            ->label('Başlangıç Saati')
-                            ->seconds(false)
-                            ->required(),
-
-                        TimePicker::make('end_time')
-                            ->label('Bitiş Saati')
-                            ->seconds(false)
-                            ->required()
-                            ->rules([
-                                fn ($get) => function (string $attribute, $value, \Closure $fail) use ($get) {
-                                    if ($value && $get('start_time') && $value <= $get('start_time')) {
-                                        $fail('Bitiş saati, başlangıç saatinden sonra olmalıdır.');
-                                    }
-                                },
-                            ]),
-
-                        TextInput::make('custom_title')
-                            ->label('Özel Yayın Başlığı (İsteğe Bağlı)')
-                            ->placeholder('Boş bırakılırsa program adı kullanılır'),
-
-                        Toggle::make('is_live')->label('Canlı Yayın'),
-                        Toggle::make('is_repeat')->label('Tekrar Yayın'),
-                        Toggle::make('is_active')->label('Aktif'),
-                        Textarea::make('note')->label('Yönetici Notu')->columnSpanFull(),
-                    ])
+                    ->schema(fn (): array => $this->getScheduleItemFormSchema())
                     ->action(function (ScheduleTemplateItem $record, array $data, ScheduleCalendarService $service) {
                         $hasOverlap = $service->checkOverlap(
                             $record->schedule_template_id,
@@ -284,6 +252,8 @@ class ScheduleCalendarPage extends Page implements HasActions, HasForms, HasTabl
                             'is_repeat' => (bool) ($data['is_repeat'] ?? false),
                             'is_active' => (bool) ($data['is_active'] ?? true),
                             'custom_title' => $data['custom_title'] ?? null,
+                            'image' => $data['image'] ?? null,
+                            'description' => $data['description'] ?? null,
                             'note' => $data['note'] ?? null,
                         ]);
 
@@ -471,7 +441,7 @@ class ScheduleCalendarPage extends Page implements HasActions, HasForms, HasTabl
                 ->action(function (array $data) {
                     $template = ScheduleTemplate::create([
                         'name' => $data['name'],
-                        'slug' => Str::slug($data['name']),
+                        'slug' => ScheduleTemplate::generateUniqueSlug($data['name']),
                         'valid_from' => $data['valid_from'] ?? null,
                         'valid_until' => $data['valid_until'] ?? null,
                         'status' => 'draft',
@@ -503,46 +473,10 @@ class ScheduleCalendarPage extends Page implements HasActions, HasForms, HasTabl
             Action::make('create_item')
                 ->label('+ Yeni Yayın')
                 ->color('amber')
-                ->schema([
-                    Select::make('program_id')
-                        ->label('Program')
-                        ->options(Program::pluck('name', 'id'))
-                        ->searchable()
-                        ->preload()
-                        ->required(),
-
-                    Select::make('day_of_week')
-                        ->label('Yayın Günü')
-                        ->options(Schedule::DAYS)
-                        ->default((int) $this->activeDayTab)
-                        ->required(),
-
-                    TimePicker::make('start_time')
-                        ->label('Başlangıç Saati')
-                        ->seconds(false)
-                        ->required(),
-
-                    TimePicker::make('end_time')
-                        ->label('Bitiş Saati')
-                        ->seconds(false)
-                        ->required()
-                        ->rules([
-                            fn ($get) => function (string $attribute, $value, \Closure $fail) use ($get) {
-                                if ($value && $get('start_time') && $value <= $get('start_time')) {
-                                    $fail('Bitiş saati, başlangıç saatinden sonra olmalıdır.');
-                                }
-                            },
-                        ]),
-
-                    TextInput::make('custom_title')
-                        ->label('Özel Yayın Başlığı (İsteğe Bağlı)')
-                        ->placeholder('Boş bırakılırsa program adı kullanılır'),
-
-                    Toggle::make('is_live')->label('Canlı Yayın')->default(false),
-                    Toggle::make('is_repeat')->label('Tekrar Yayın')->default(false),
-                    Toggle::make('is_active')->label('Aktif')->default(true),
-                    Textarea::make('note')->label('Yönetici Notu')->columnSpanFull(),
-                ])
+                ->modalHeading('Yeni Yayın Ekle')
+                ->modalSubmitActionLabel('Yayını Ekle')
+                ->modalCancelActionLabel('Vazgeç')
+                ->schema(fn (): array => $this->getScheduleItemFormSchema((int) $this->activeDayTab))
                 ->action(function (array $data, ScheduleCalendarService $service) {
                     $template = $this->selectedTemplate;
                     if (! $template) {
@@ -574,6 +508,8 @@ class ScheduleCalendarPage extends Page implements HasActions, HasForms, HasTabl
                         'start_time' => $data['start_time'],
                         'end_time' => $data['end_time'],
                         'custom_title' => $data['custom_title'] ?? null,
+                        'image' => $data['image'] ?? null,
+                        'description' => $data['description'] ?? null,
                         'is_live' => (bool) ($data['is_live'] ?? false),
                         'is_repeat' => (bool) ($data['is_repeat'] ?? false),
                         'is_active' => (bool) ($data['is_active'] ?? true),
@@ -691,6 +627,88 @@ class ScheduleCalendarPage extends Page implements HasActions, HasForms, HasTabl
             ->label('İşlemler')
             ->icon(Heroicon::OutlinedEllipsisVertical)
             ->color('gray'),
+        ];
+    }
+
+    protected function getScheduleItemFormSchema(?int $defaultDay = null): array
+    {
+        return [
+            Section::make('İçerik')
+                ->schema([
+                    Select::make('program_id')
+                        ->label('Program')
+                        ->options(Program::pluck('name', 'id'))
+                        ->searchable()
+                        ->preload()
+                        ->required(),
+
+                    TextInput::make('custom_title')
+                        ->label('Özel Yayın Başlığı (İsteğe Bağlı)')
+                        ->placeholder('Boş bırakılırsa program adı kullanılır'),
+                ]),
+
+            Section::make('Zamanlama')
+                ->schema([
+                    Select::make('day_of_week')
+                        ->label('Yayın Günü')
+                        ->options(Schedule::DAYS)
+                        ->default($defaultDay ?? 0)
+                        ->required(),
+
+                    Grid::make(2)->schema([
+                        TimePicker::make('start_time')
+                            ->label('Başlangıç Saati')
+                            ->seconds(false)
+                            ->required(),
+
+                        TimePicker::make('end_time')
+                            ->label('Bitiş Saati')
+                            ->seconds(false)
+                            ->required()
+                            ->rules([
+                                fn ($get) => function (string $attribute, $value, \Closure $fail) use ($get) {
+                                    if ($value && $get('start_time') && $value <= $get('start_time')) {
+                                        $fail('Bitiş saati, başlangıç saatinden sonra olmalıdır.');
+                                    }
+                                },
+                            ]),
+                    ]),
+                ]),
+
+            Section::make('Yayın Bilgisi')
+                ->schema([
+                    Grid::make(3)->schema([
+                        Toggle::make('is_live')->label('Canlı Yayın')->default(false),
+                        Toggle::make('is_repeat')->label('Tekrar Yayın')->default(false),
+                        Toggle::make('is_active')->label('Aktif')->default(true),
+                    ]),
+                ]),
+
+            Section::make('Görsel ve Açıklama')
+                ->schema([
+                    FileUpload::make('image')
+                        ->label('Yayın Görseli')
+                        ->disk('public')
+                        ->directory('schedules')
+                        ->image()
+                        ->imageEditor()
+                        ->imageEditorAspectRatios(['16:9'])
+                        ->acceptedFileTypes(['image/jpeg', 'image/jpg', 'image/png', 'image/webp'])
+                        ->maxSize(5120)
+                        ->helperText('Önerilen görsel boyutu: 1920 × 1080 piksel (16:9). En fazla 5 MB boyutunda JPG, PNG veya WEBP yükleyin. Görsel eklenmezse program kapağı kullanılacaktır.'),
+
+                    Textarea::make('description')
+                        ->label('Yayın Açıklaması')
+                        ->maxLength(1000)
+                        ->helperText('Bu açıklama, ilgili yayın public sitede gösterildiğinde kullanılabilir.'),
+                ]),
+
+            Section::make('Yönetici Notu')
+                ->schema([
+                    Textarea::make('note')
+                        ->label('Yönetici Notu')
+                        ->helperText('Bu not yalnızca yönetim panelinde görünür; public sitede yayınlanmaz.'),
+                ]),
         ];
     }
 }

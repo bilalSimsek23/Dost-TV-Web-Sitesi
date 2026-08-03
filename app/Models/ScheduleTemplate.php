@@ -44,11 +44,25 @@ class ScheduleTemplate extends Model
         'archived' => 'Arşivlendi',
     ];
 
+    public static function generateUniqueSlug(string $name, ?int $ignoreId = null): string
+    {
+        $baseSlug = Str::slug($name) ?: 'yayin-akisi';
+        $slug = $baseSlug;
+        $count = 1;
+
+        while (static::where('slug', $slug)->when($ignoreId, fn ($q) => $q->where('id', '!=', $ignoreId))->exists()) {
+            $slug = "{$baseSlug}-{$count}";
+            $count++;
+        }
+
+        return $slug;
+    }
+
     protected static function booted(): void
     {
         static::saving(function (ScheduleTemplate $template) {
-            if (blank($template->slug) && filled($template->name)) {
-                $template->slug = Str::slug($template->name);
+            if (blank($template->slug) || static::where('slug', $template->slug)->where('id', '!=', $template->id ?? 0)->exists()) {
+                $template->slug = static::generateUniqueSlug($template->name ?: 'yayin-akisi', $template->id);
             }
         });
     }
@@ -93,7 +107,7 @@ class ScheduleTemplate extends Model
     {
         $newTemplate = $this->replicate(['slug', 'version', 'status']);
         $newTemplate->name = $newName;
-        $newTemplate->slug = Str::slug($newName);
+        $newTemplate->slug = static::generateUniqueSlug($newName);
         $newTemplate->version = 1;
         $newTemplate->status = 'draft';
 

@@ -21,6 +21,8 @@ class ScheduleTemplateItem extends Model
         'is_repeat',
         'is_active',
         'note',
+        'image',
+        'description',
         'link_type',
         'episode_id',
         'external_url',
@@ -57,6 +59,23 @@ class ScheduleTemplateItem extends Model
     public function getDisplayTitleAttribute(): string
     {
         return $this->custom_title ?: ($this->program?->name ?? 'Program');
+    }
+
+    public function getEffectiveImageAttribute(): string
+    {
+        if (filled($this->image)) {
+            return asset('storage/' . $this->image);
+        }
+
+        if ($this->episode && filled($this->episode->cover_image ?? null)) {
+            return $this->episode->cover_image;
+        }
+
+        if ($this->program && filled($this->program->cover_image ?? null)) {
+            return $this->program->cover_image;
+        }
+
+        return 'https://dosttv.com/wp-content/uploads/2022/02/dost_logo.png';
     }
 
     public function getTargetUrlAttribute(): ?string
