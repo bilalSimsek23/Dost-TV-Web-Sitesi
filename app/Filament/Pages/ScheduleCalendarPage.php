@@ -52,6 +52,8 @@ class ScheduleCalendarPage extends Page implements HasActions, HasForms, HasTabl
 
     protected static ?string $navigationLabel = 'Yayın Akışı';
 
+    protected static ?int $navigationSort = 1;
+
     protected static ?string $title = 'Yayın Akışı';
 
     protected static ?string $slug = 'schedule-calendar';
@@ -75,11 +77,20 @@ class ScheduleCalendarPage extends Page implements HasActions, HasForms, HasTabl
 
     public function mount(): void
     {
-        $service = app(ScheduleCalendarService::class);
-        $template = $service->getActiveOrSelectedTemplate();
+        if (request()->has('template')) {
+            $queryTemplateId = (int) request()->query('template');
+            if (ScheduleTemplate::where('id', $queryTemplateId)->exists()) {
+                $this->selectedTemplateId = $queryTemplateId;
+            }
+        }
 
-        if ($template) {
-            $this->selectedTemplateId = $template->id;
+        if (! $this->selectedTemplateId) {
+            $service = app(ScheduleCalendarService::class);
+            $template = $service->getActiveOrSelectedTemplate();
+
+            if ($template) {
+                $this->selectedTemplateId = $template->id;
+            }
         }
 
         $this->selectedDay = (int) $this->activeDayTab;

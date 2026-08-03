@@ -64,6 +64,10 @@ class ScheduleTemplate extends Model
             if (blank($template->slug) || static::where('slug', $template->slug)->where('id', '!=', $template->id ?? 0)->exists()) {
                 $template->slug = static::generateUniqueSlug($template->name ?: 'yayin-akisi', $template->id);
             }
+
+            if ($template->is_active) {
+                static::where('id', '!=', $template->id ?? 0)->where('is_active', true)->update(['is_active' => false]);
+            }
         });
     }
 

@@ -21,7 +21,7 @@ class KhatmResource extends Resource
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedBookOpen;
 
-    protected static string|\UnitEnum|null $navigationGroup = 'Yayın Yönetimi';
+    protected static string|\UnitEnum|null $navigationGroup = 'İçerik Yönetimi';
 
     protected static ?string $navigationLabel = 'Hatim / Cüz Al Yönetimi';
 
