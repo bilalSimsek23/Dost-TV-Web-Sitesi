@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(php artisan *)",
+      "Bash(grep -rn 'use Filament.*\\\\\\\\Get;\\\\|use Filament.*\\\\\\\\Set;\\\\|Get $get\\\\|Set $set' app/Filament)",
+      "Bash(grep -rn 'static.*$navigationGroup\\\\s*=\\\\|static.*$navigationGroup;\\\\|static.*$navigationLabel\\\\|static.*$modelLabel\\\\|static.*$pluralModelLabel' vendor/filament/filament/src/Resources/ vendor/filament/support/src/)",
+      "Read(//private/var/folders/0x/5r6c51d53bldjdrqmhgy4g9h0000gn/T/**)",
+      "Bash(grep -n \"fi-sidebar-item-label\\\\|fi-sidebar-group-label\" /tmp/real_admin_categories.html | head -5 *)",
+      "Read(//private/tmp/**)",
+      "Bash(php -m)",
+      "Bash(/usr/bin/curl --version)",
+      "Bash(grep -n 'return $navigationItems;' '/Users/mac/Dost TV Web Site/app/Providers/Filament/AdminPanelProvider.php')"
+    ]
+  }
+}
