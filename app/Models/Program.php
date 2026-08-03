@@ -17,15 +17,33 @@ class Program extends Model
     protected $fillable = [
         'name',
         'slug',
+        'status',
+        'short_description',
         'description',
         'cover_image',
+        'horizontal_image',
+        'program_logo',
+        'default_episode_image',
         'trailer_url',
         'is_active',
+        'is_featured',
+        'show_on_public',
         'sort_order',
+        'meta_title',
+        'meta_description',
     ];
 
     protected $casts = [
         'is_active' => 'boolean',
+        'is_featured' => 'boolean',
+        'show_on_public' => 'boolean',
+    ];
+
+    public const STATUSES = [
+        'active' => 'Aktif',
+        'season_break' => 'Sezon Arasında',
+        'completed' => 'Sona Erdi',
+        'archived' => 'Arşivlendi',
     ];
 
     protected static function booted(): void
@@ -33,6 +51,13 @@ class Program extends Model
         static::saving(function (Program $program) {
             if (blank($program->slug)) {
                 $program->slug = Str::slug($program->name);
+            }
+
+            // Sync is_active with status & show_on_public for backward compatibility
+            if ($program->status === 'active' && $program->show_on_public) {
+                $program->is_active = true;
+            } elseif ($program->status === 'completed' || $program->status === 'archived' || ! $program->show_on_public) {
+                $program->is_active = false;
             }
         });
 
