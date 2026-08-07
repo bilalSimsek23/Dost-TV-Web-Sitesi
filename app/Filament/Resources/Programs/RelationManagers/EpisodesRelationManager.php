@@ -109,17 +109,17 @@ class EpisodesRelationManager extends RelationManager
             ])
             ->headerActions([
                 Action::make('sync_youtube_playlist')
-                    ->label("YouTube'u Şimdi Kontrol Et")
+                    ->label("YouTube ile Senkronize Et")
                     ->icon('heroicon-o-arrow-path')
                     ->color('warning')
                     ->visible(fn () => filled($this->getOwnerRecord()->youtube_playlist_url))
                     ->action(function () {
                         $service = app(\App\Services\YouTube\YouTubePlaylistSyncService::class);
-                        $result = $service->syncProgramPlaylist($this->getOwnerRecord(), false);
+                        $result = $service->syncProgramPlaylist($this->getOwnerRecord(), false, true);
 
                         if (! ($result['success'] ?? true)) {
                             \Filament\Notifications\Notification::make()
-                                ->title('YouTube kontrolü başarısız oldu.')
+                                ->title('YouTube senkronizasyonu başarısız oldu.')
                                 ->body($result['message'] ?? 'Bilinmeyen hata oluştu.')
                                 ->danger()
                                 ->send();
@@ -127,20 +127,23 @@ class EpisodesRelationManager extends RelationManager
                             return;
                         }
 
-                        $checked = $result['total_items'] ?? 0;
-                        $count = $result['created_episodes'] ?? 0;
+                        $total = $result['total_items'] ?? 0;
+                        $new = $result['created_episodes'] ?? 0;
+                        $updated = $result['updated_episodes'] ?? 0;
+                        $unchanged = $result['unchanged_episodes'] ?? 0;
+                        $errors = $result['errors'] ?? 0;
 
-                        if ($count > 0) {
-                            \Filament\Notifications\Notification::make()
-                                ->title("{$checked} video kontrol edildi. {$count} yeni bölüm eklendi.")
-                                ->success()
-                                ->send();
-                        } else {
-                            \Filament\Notifications\Notification::make()
-                                ->title('Yeni video bulunamadı.')
-                                ->info()
-                                ->send();
-                        }
+                        $summary = "Toplam video: {$total}\n"
+                            . "Yeni eklenen: {$new}\n"
+                            . "Güncellenen: {$updated}\n"
+                            . "Değişmeyen: {$unchanged}\n"
+                            . "Hatalı: {$errors}";
+
+                        \Filament\Notifications\Notification::make()
+                            ->title('YouTube Senkronizasyonu Tamamlandı')
+                            ->body($summary)
+                            ->success()
+                            ->send();
                     }),
 
                 CreateAction::make()

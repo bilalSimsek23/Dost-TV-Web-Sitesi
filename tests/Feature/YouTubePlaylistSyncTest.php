@@ -496,4 +496,57 @@ class YouTubePlaylistSyncTest extends TestCase
         $this->assertEquals(29, $aug03->episode_number);
         $this->assertEquals(30, $aug05->episode_number);
     }
+
+    public function test_manual_sync_with_metadata_update_updates_existing_episodes_without_mutating_episode_number_or_slug(): void
+    {
+        $ep = Episode::create([
+            'program_id' => $this->program->id,
+            'title' => 'Eski Başlık',
+            'description' => 'Eski Açıklama',
+            'episode_number' => 12,
+            'season_number' => 1,
+            'slug' => 'ozel-sabitlemis-slug-12',
+            'video_source' => 'youtube',
+            'youtube_url' => 'https://www.youtube.com/watch?v=UPDATEMETA1',
+            'status' => 'published',
+            'is_active' => true,
+            'show_on_public' => true,
+            'sort_order' => 5,
+        ]);
+
+        Http::fake([
+            '*' => Http::response([
+                'items' => [
+                    [
+                        'snippet' => [
+                            'resourceId' => ['videoId' => 'UPDATEMETA1'],
+                            'title' => 'Güncellenmiş YouTube Başlığı',
+                            'description' => 'Güncellenmiş YouTube Açıklaması',
+                            'publishedAt' => '2026-08-07T12:00:00Z',
+                        ],
+                    ],
+                ],
+            ], 200),
+        ]);
+
+        $service = new YouTubePlaylistSyncService();
+        $result = $service->syncProgramPlaylist($this->program, false, true);
+
+        $this->assertEquals(1, $result['updated_episodes']);
+        $this->assertEquals(0, $result['new_videos']);
+
+        $fresh = $ep->fresh();
+        $this->assertEquals('Güncellenmiş YouTube Başlığı', $fresh->title);
+        $this->assertEquals('Güncellenmiş YouTube Açıklaması', $fresh->description);
+        
+        // Assert untouchable fields remained completely unchanged
+        $this->assertEquals(12, $fresh->episode_number);
+        $this->assertEquals(1, $fresh->season_number);
+        $this->assertEquals('ozel-sabitlemis-slug-12', $fresh->slug);
+        $this->assertEquals($this->program->id, $fresh->program_id);
+        $this->assertEquals('published', $fresh->status);
+        $this->assertTrue($fresh->show_on_public);
+        $this->assertTrue($fresh->is_active);
+        $this->assertEquals(5, $fresh->sort_order);
+    }
 }
