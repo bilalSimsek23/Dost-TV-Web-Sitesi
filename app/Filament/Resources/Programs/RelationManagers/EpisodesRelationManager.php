@@ -4,6 +4,7 @@ namespace App\Filament\Resources\Programs\RelationManagers;
 
 use App\Filament\Resources\Episodes\Schemas\EpisodeForm;
 use App\Models\Episode;
+use App\Support\Youtube;
 use Filament\Actions\Action;
 use Filament\Actions\CreateAction;
 use Filament\Actions\DeleteAction;
@@ -11,9 +12,10 @@ use Filament\Actions\EditAction;
 use Filament\Forms\Components\Hidden;
 use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Schemas\Schema;
-use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
+use Illuminate\Support\HtmlString;
+use Illuminate\Support\Str;
 
 class EpisodesRelationManager extends RelationManager
 {
@@ -36,7 +38,36 @@ class EpisodesRelationManager extends RelationManager
             ->header(fn () => view('filament.resources.programs.episodes-relation-header', ['program' => $this->getOwnerRecord()]))
             ->recordTitleAttribute('title')
             ->modifyQueryUsing(fn ($query) => $query->orderByRaw('CASE WHEN episode_number IS NULL THEN 1 ELSE 0 END')->orderBy('episode_number', 'desc')->orderBy('created_at', 'desc'))
+            ->defaultSort('episode_number', 'desc')
             ->columns([
+                TextColumn::make('thumbnail')
+                    ->label('Thumbnail')
+                    ->formatStateUsing(function ($state, Episode $record) {
+                        $imgUrl = null;
+                        if (filled($state)) {
+                            $imgUrl = Str::startsWith($state, ['http://', 'https://']) ? $state : asset('storage/' . $state);
+                        } else {
+                            $vId = Youtube::extractVideoId($record->youtube_url);
+                            if ($vId) {
+                                $imgUrl = "https://i.ytimg.com/vi/{$vId}/hqdefault.jpg";
+                            }
+                        }
+
+                        if ($imgUrl) {
+                            return new HtmlString("
+                                <div class='w-[120px] h-[68px] aspect-[16/9] rounded overflow-hidden bg-gray-800 flex-shrink-0 border border-gray-800 select-none'>
+                                    <img src='{$imgUrl}' class='w-full h-full object-cover' alt='Thumbnail' loading='lazy' onerror=\"this.onerror=null; this.parentElement.innerHTML='<div class=\\'w-full h-full flex items-center justify-center text-gray-500 text-xs font-semibold\\'>Visual</div>';\" />
+                                </div>
+                            ");
+                        }
+
+                        return new HtmlString("
+                            <div class='w-[120px] h-[68px] aspect-[16/9] rounded bg-gray-800 flex items-center justify-center text-gray-400 text-xs font-semibold flex-shrink-0 select-none border border-gray-800'>
+                                Görsel Yok
+                            </div>
+                        ");
+                    }),
+
                 TextColumn::make('episode_number')
                     ->label('Bölüm No')
                     ->formatStateUsing(function ($state, Episode $record) {
@@ -51,48 +82,30 @@ class EpisodesRelationManager extends RelationManager
                     ->label('Bölüm Başlığı')
                     ->searchable()
                     ->sortable()
+                    ->wrap()
+                    ->tooltip(fn (Episode $record) => $record->title)
                     ->weight('bold'),
-
-                TextColumn::make('video_source')
-                    ->label('Video')
-                    ->badge()
-                    ->formatStateUsing(fn ($state, Episode $record) => match ($state) {
-                        'youtube' => 'YouTube',
-                        'upload' => 'Yüklenmiş Video',
-                        'vimeo' => 'Vimeo',
-                        'hls' => 'HLS Stream',
-                        default => (filled($record->youtube_url) || filled($record->video_path)) ? 'Video Var' : 'Video Yok',
-                    })
-                    ->color(fn ($state, Episode $record) => match ($state) {
-                        'youtube' => 'danger',
-                        'upload', 'vimeo', 'hls' => 'info',
-                        default => (filled($record->youtube_url) || filled($record->video_path)) ? 'info' : 'gray',
-                    }),
-
-                TextColumn::make('status')
-                    ->label('Durum')
-                    ->badge()
-                    ->formatStateUsing(fn ($state) => Episode::STATUSES[$state] ?? $state)
-                    ->color(fn ($state) => match ($state) {
-                        'published' => 'success',
-                        'ready' => 'warning',
-                        'draft' => 'gray',
-                        'archived' => 'danger',
-                        default => 'info',
-                    }),
-
-                IconColumn::make('show_on_public')
-                    ->label('Public')
-                    ->boolean()
-                    ->trueIcon('heroicon-o-eye')
-                    ->falseIcon('heroicon-o-eye-slash')
-                    ->trueColor('success')
-                    ->falseColor('gray'),
 
                 TextColumn::make('aired_at')
                     ->label('Yayın Tarihi')
                     ->date('d.m.Y')
                     ->sortable(),
+
+                TextColumn::make('youtube_url')
+                    ->label('YouTube')
+                    ->formatStateUsing(function ($state, Episode $record) {
+                        $url = $record->canonical_url ?: $state;
+                        if (blank($url)) {
+                            return new HtmlString("<span class='text-gray-500 text-xs'>-</span>");
+                        }
+
+                        return new HtmlString("
+                            <a href='{$url}' target='_blank' class='inline-flex items-center gap-1.5 px-3 py-1.5 bg-red-600 hover:bg-red-500 text-white font-medium text-xs rounded-lg transition select-none shadow-sm'>
+                                <span>▶</span>
+                                <span>YouTube'da Aç ↗</span>
+                            </a>
+                        ");
+                    }),
             ])
             ->headerActions([
                 Action::make('sync_youtube_playlist')
@@ -139,15 +152,6 @@ class EpisodesRelationManager extends RelationManager
             ])
             ->actions([
                 EditAction::make(),
-
-                Action::make('open_youtube')
-                    ->label("YouTube'da Aç")
-                    ->icon('heroicon-o-arrow-top-right-on-square')
-                    ->color('danger')
-                    ->visible(fn (Episode $record) => filled($record->youtube_url))
-                    ->url(fn (Episode $record) => $record->canonical_url ?: $record->youtube_url)
-                    ->openUrlInNewTab(),
-
                 DeleteAction::make(),
             ])
             ->paginated([25, 50, 100])
