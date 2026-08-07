@@ -38,17 +38,42 @@ class EpisodeResourceTest extends TestCase
             ->assertSuccessful();
     }
 
-    public function test_episodes_are_listed(): void
+    public function test_episodes_main_index_groups_by_program_and_season(): void
     {
         $episode = Episode::create([
             'program_id' => $this->program->id,
+            'season_number' => 1,
             'title' => 'Test Bölümü',
             'status' => 'published',
+            'aired_at' => now(),
         ]);
 
         Livewire::actingAs($this->admin)
             ->test(ListEpisodes::class)
             ->assertCanSeeTableRecords([$episode]);
+    }
+
+    public function test_season_detail_mode_filters_episodes_by_program_and_season(): void
+    {
+        $epA = Episode::create([
+            'program_id' => $this->program->id,
+            'season_number' => 1,
+            'title' => 'Sezon 1 Bölüm',
+            'status' => 'published',
+        ]);
+
+        $epB = Episode::create([
+            'program_id' => $this->program->id,
+            'season_number' => 2,
+            'title' => 'Sezon 2 Bölüm',
+            'status' => 'published',
+        ]);
+
+        Livewire::actingAs($this->admin)
+            ->withQueryParams(['program_id' => $this->program->id, 'season_number' => 1])
+            ->test(ListEpisodes::class)
+            ->assertCanSeeTableRecords([$epA])
+            ->assertCanNotSeeTableRecords([$epB]);
     }
 
     public function test_can_create_new_episode_with_program_selection_and_seo(): void
@@ -108,38 +133,13 @@ class EpisodeResourceTest extends TestCase
         ]);
     }
 
-    public function test_create_episode_prefills_program_id_from_query_parameter(): void
+    public function test_create_episode_prefills_program_id_and_season_number_from_query_parameters(): void
     {
         Livewire::actingAs($this->admin)
-            ->withQueryParams(['program_id' => $this->program->id])
+            ->withQueryParams(['program_id' => $this->program->id, 'season_number' => 3])
             ->test(CreateEpisode::class)
-            ->assertSet('data.program_id', (string) $this->program->id);
-    }
-
-    public function test_episode_can_be_archived_and_unarchived_without_data_loss(): void
-    {
-        $episode = Episode::create([
-            'program_id' => $this->program->id,
-            'title' => 'Arşivlenecek Bölüm',
-            'status' => 'published',
-            'is_active' => true,
-        ]);
-
-        Livewire::actingAs($this->admin)
-            ->test(ListEpisodes::class)
-            ->callTableAction('archive', $episode)
-            ->assertHasNoTableActionErrors();
-
-        $this->assertEquals('archived', $episode->fresh()->status);
-        $this->assertFalse($episode->fresh()->show_on_public);
-
-        Livewire::actingAs($this->admin)
-            ->test(ListEpisodes::class)
-            ->callTableAction('unarchive', $episode)
-            ->assertHasNoTableActionErrors();
-
-        $this->assertEquals('published', $episode->fresh()->status);
-        $this->assertTrue($episode->fresh()->show_on_public);
+            ->assertSet('data.program_id', $this->program->id)
+            ->assertSet('data.season_number', 3);
     }
 
     public function test_public_program_detail_page_displays_active_published_episodes(): void

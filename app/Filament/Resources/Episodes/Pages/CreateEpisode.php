@@ -11,12 +11,20 @@ class CreateEpisode extends BaseCreateRecord
 
     public function mount(): void
     {
+        $programId = request()->query('program_id');
+        $season = request()->query('season_number');
+
         parent::mount();
 
-        if (request()->has('program_id')) {
-            $this->form->fill([
-                'program_id' => request()->query('program_id'),
-            ]);
+        if ($programId || $season) {
+            $data = [];
+            if ($programId) {
+                $data['program_id'] = (int) $programId;
+            }
+            if ($season && $season !== 'none') {
+                $data['season_number'] = (int) $season;
+            }
+            $this->form->fill($data);
         }
     }
 }
