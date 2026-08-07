@@ -6,6 +6,7 @@ use App\Filament\Resources\Episodes\EpisodeResource;
 use App\Models\Episode;
 use App\Models\Program;
 use Filament\Actions\Action;
+use Filament\Actions\CreateAction;
 use Filament\Resources\Pages\ListRecords;
 
 class ListEpisodes extends ListRecords
@@ -66,7 +67,12 @@ class ListEpisodes extends ListRecords
             ];
         }
 
-        // Global actions removed from main grouped index view
-        return [];
+        // Global + Yeni Bölüm action for main index view (mode A)
+        return [
+            CreateAction::make()
+                ->label('+ Yeni Bölüm')
+                ->icon('heroicon-o-plus')
+                ->color('primary'),
+        ];
     }
 }

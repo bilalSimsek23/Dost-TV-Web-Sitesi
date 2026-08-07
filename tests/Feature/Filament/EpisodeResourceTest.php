@@ -38,11 +38,11 @@ class EpisodeResourceTest extends TestCase
             ->assertSuccessful();
     }
 
-    public function test_main_episodes_index_has_no_global_create_or_import_header_actions(): void
+    public function test_main_episodes_index_has_yeni_bolum_action_and_no_global_import_action(): void
     {
         Livewire::actingAs($this->admin)
             ->test(ListEpisodes::class)
-            ->assertActionDoesNotExist('create')
+            ->assertActionExists('create')
             ->assertActionDoesNotExist('youtube_import');
     }
 
