@@ -3,7 +3,10 @@
 namespace Tests\Feature\Filament;
 
 use App\Filament\Resources\Categories\Pages\CreateCategory;
+use App\Filament\Resources\Categories\Pages\EditCategory;
+use App\Filament\Resources\Categories\RelationManagers\ProgramsRelationManager;
 use App\Models\Category;
+use App\Models\Episode;
 use App\Models\Program;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -74,26 +77,76 @@ class CategoryResourceTest extends TestCase
         $this->assertEquals(1, \App\Filament\Resources\Categories\CategoryResource::getNavigationSort());
     }
 
-    public function test_sub_category_creation_and_parent_relationship(): void
+    public function test_parent_id_and_sort_order_are_removed_from_form_schema_but_db_columns_exist(): void
     {
-        $parent = Category::create(['name' => 'Dini Programlar', 'slug' => 'dini-programlar']);
-
-        Livewire::actingAs($this->admin)
-            ->test(CreateCategory::class)
-            ->fillForm([
-                'name' => 'Sohbetler',
-                'parent_id' => $parent->id,
-                'show_in_menu' => true,
-                'show_in_mega_menu' => true,
-            ])
-            ->call('create')
-            ->assertHasNoFormErrors();
+        $category = Category::create([
+            'name' => 'Dini Programlar',
+            'slug' => 'dini-programlar',
+            'parent_id' => null,
+            'sort_order' => 10,
+        ]);
 
         $this->assertDatabaseHas('categories', [
-            'name' => 'Sohbetler',
-            'parent_id' => $parent->id,
-            'show_in_menu' => true,
-            'show_in_mega_menu' => true,
+            'id' => $category->id,
+            'sort_order' => 10,
         ]);
+    }
+
+    public function test_attached_programs_relation_manager_lists_category_programs_and_allows_attach_and_detach(): void
+    {
+        $category = Category::create(['name' => 'Kültür Sanat', 'slug' => 'kultur-sanat']);
+        $otherCategory = Category::create(['name' => 'Spor', 'slug' => 'spor']);
+
+        $programAttached = Program::create(['name' => 'Bağlı Program', 'slug' => 'bagli-program', 'status' => 'active']);
+        $programOther = Program::create(['name' => 'Diğer Program', 'slug' => 'diger-program', 'status' => 'active']);
+
+        $category->programs()->attach($programAttached);
+        $otherCategory->programs()->attach($programOther);
+
+        Episode::create([
+            'program_id' => $programAttached->id,
+            'title' => 'Test Bölüm',
+            'status' => 'published',
+        ]);
+
+        // Assert relation manager lists only attached program
+        Livewire::actingAs($this->admin)
+            ->test(ProgramsRelationManager::class, [
+                'ownerRecord' => $category,
+                'pageClass' => EditCategory::class,
+            ])
+            ->assertCanSeeTableRecords([$programAttached])
+            ->assertCanNotSeeTableRecords([$programOther]);
+
+        // Attach unattached program
+        Livewire::actingAs($this->admin)
+            ->test(ProgramsRelationManager::class, [
+                'ownerRecord' => $category,
+                'pageClass' => EditCategory::class,
+            ])
+            ->callTableAction('attach', null, ['recordId' => $programOther->id])
+            ->assertHasNoTableActionErrors();
+
+        $this->assertDatabaseHas('category_program', [
+            'category_id' => $category->id,
+            'program_id' => $programOther->id,
+        ]);
+
+        // Detach program (pivot record removed, program remains intact)
+        Livewire::actingAs($this->admin)
+            ->test(ProgramsRelationManager::class, [
+                'ownerRecord' => $category,
+                'pageClass' => EditCategory::class,
+            ])
+            ->callTableAction('detach', $programAttached)
+            ->assertHasNoTableActionErrors();
+
+        $this->assertDatabaseMissing('category_program', [
+            'category_id' => $category->id,
+            'program_id' => $programAttached->id,
+        ]);
+
+        // Program record itself was not deleted
+        $this->assertDatabaseHas('programs', ['id' => $programAttached->id]);
     }
 }

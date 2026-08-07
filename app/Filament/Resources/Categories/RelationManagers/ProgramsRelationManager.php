@@ -2,87 +2,87 @@
 
 namespace App\Filament\Resources\Categories\RelationManagers;
 
+use App\Models\Program;
+use Filament\Actions\Action;
 use Filament\Actions\AttachAction;
-
 use Filament\Actions\DetachAction;
-use Filament\Actions\EditAction;
-use Filament\Forms\Components\TextInput;
-use Filament\Forms\Components\Toggle;
 use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Schemas\Schema;
-use Filament\Tables\Columns\ImageColumn;
+use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
-use Filament\Tables\Columns\ToggleColumn;
-use BackedEnum;
-use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
 
 class ProgramsRelationManager extends RelationManager
 {
     protected static string $relationship = 'programs';
 
-    protected static ?string $title = 'Programlar';
-
-    protected static string|BackedEnum|null $icon = Heroicon::OutlinedTv;
+    protected static ?string $title = 'Bu Kategorideki Programlar';
 
     public function form(Schema $schema): Schema
     {
-        return $schema->components([
-            TextInput::make('title')
-                ->label('Program Adı')
-                ->required(),
-
-            Toggle::make('is_active')
-                ->label('Aktif'),
-
-            Toggle::make('is_featured')
-                ->label('Öne Çıkan'),
-
-            TextInput::make('sort_order')
-                ->label('Sıra')
-                ->numeric(),
-        ]);
+        return $schema->components([]);
     }
 
     public function table(Table $table): Table
     {
         return $table
-            ->recordTitleAttribute('title')
-            ->defaultSort('sort_order')
-            ->reorderable('sort_order')
+            ->recordTitleAttribute('name')
+            ->defaultSort('name', 'asc')
             ->columns([
-                ImageColumn::make('cover_image')
-                    ->label('Kapak Görseli')
-                    ->square(),
-
-                TextColumn::make('title')
+                TextColumn::make('name')
                     ->label('Program Adı')
-                    ->searchable(),
+                    ->searchable()
+                    ->sortable()
+                    ->weight('bold'),
 
-                ToggleColumn::make('is_active')
-                    ->label('Aktif'),
+                TextColumn::make('status')
+                    ->label('Durum')
+                    ->badge()
+                    ->formatStateUsing(fn ($state) => match ($state) {
+                        'active' => 'Aktif',
+                        'passive' => 'Pasif',
+                        'draft' => 'Taslak',
+                        default => $state ?? 'Aktif',
+                    })
+                    ->color(fn ($state) => match ($state) {
+                        'active' => 'success',
+                        'passive' => 'danger',
+                        'draft' => 'gray',
+                        default => 'info',
+                    }),
 
-                ToggleColumn::make('is_featured')
-                    ->label('Öne Çıkan'),
-
-                TextColumn::make('sort_order')
-                    ->label('Sıra')
+                TextColumn::make('episodes_count')
+                    ->label('Bölüm Sayısı')
+                    ->counts('episodes')
                     ->numeric()
                     ->sortable(),
 
-                TextColumn::make('updated_at')
-                    ->label('Güncellenme Tarihi')
-                    ->dateTime(),
+                IconColumn::make('is_active')
+                    ->label('Public')
+                    ->boolean()
+                    ->trueIcon('heroicon-o-check-circle')
+                    ->falseIcon('heroicon-o-x-circle')
+                    ->trueColor('success')
+                    ->falseColor('gray'),
             ])
             ->headerActions([
                 AttachAction::make()
-                    ->label('Programa Kategori Ata')
-                    ->preloadRecordSelect(),
+                    ->label('+ Program Ata')
+                    ->preloadRecordSelect()
+                    ->recordTitleAttribute('name'),
             ])
             ->recordActions([
-                EditAction::make(),
+                Action::make('go_to_program')
+                    ->label('Programa Git')
+                    ->icon('heroicon-o-arrow-top-right-on-square')
+                    ->color('info')
+                    ->url(fn (Program $record) => url("/admin/programs/{$record->id}/edit")),
+
                 DetachAction::make()
-                    ->label('Kategoriden Çıkar'),
-            ]);
+                    ->label('Kategoriden Çıkar')
+                    ->color('danger'),
+            ])
+            ->paginated([25, 50, 100])
+            ->defaultPaginationPageOption(25);
     }
 }

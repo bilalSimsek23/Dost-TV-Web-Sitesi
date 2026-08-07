@@ -37,33 +37,6 @@ class CategoryForm
                                     ->unique(ignoreRecord: true)
                                     ->helperText('Sayfa web adresinde görünecek metin. Boş bırakılırsa kategori adından otomatik üretilir.'),
 
-                                Select::make('parent_id')
-                                    ->label('Üst Kategori')
-                                    ->options(function (?Category $record) {
-                                        $excludedIds = $record ? [$record->getKey(), ...$record->descendantIds()] : [];
-
-                                        $categories = Category::query()
-                                            ->with('parent')
-                                            ->where('slug', '!=', Category::ALL_CATEGORIES_SLUG)
-                                            ->when($excludedIds, fn ($query) => $query->whereNotIn('id', $excludedIds))
-                                            ->orderBy('name')
-                                            ->get();
-
-                                        $options = [];
-                                        foreach ($categories as $cat) {
-                                            if ($cat->parent) {
-                                                $options[$cat->id] = "{$cat->parent->name} → {$cat->name} (Alt Kategori)";
-                                            } else {
-                                                $options[$cat->id] = "📁 {$cat->name} (Ana Kategori)";
-                                            }
-                                        }
-
-                                        return $options;
-                                    })
-                                    ->searchable()
-                                    ->placeholder('Yok (Ana Kategori Yap)')
-                                    ->helperText('Üst kategori seçilirse bu kayıt alt kategoriye dönüşür.'),
-
                                 Textarea::make('description')
                                     ->label('Açıklama')
                                     ->columnSpanFull(),
@@ -76,11 +49,6 @@ class CategoryForm
                                 Toggle::make('is_featured')
                                     ->label('Öne Çıkan')
                                     ->helperText('Anasayfa veya özel bloklarda öne çıkarılsın.'),
-
-                                TextInput::make('sort_order')
-                                    ->label('Sıra')
-                                    ->numeric()
-                                    ->default(0),
                             ]),
 
                         Tab::make('Görseller')
