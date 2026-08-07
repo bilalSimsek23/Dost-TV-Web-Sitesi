@@ -144,36 +144,6 @@ class ProgramForm
                                     ]),
                             ]),
 
-                        Tab::make('📡 Yayın Bilgileri')
-                            ->schema([
-                                Placeholder::make('schedule_summary')
-                                    ->label('Yayın Akışı Özeti')
-                                    ->content(function ($record) {
-                                        if (! $record) {
-                                            return new HtmlString('<div class="p-4 bg-gray-800 rounded-lg text-sm text-gray-400">Yayın bilgilerini görmek için önce programı kaydediniz.</div>');
-                                        }
-
-                                        $totalSchedule = $record->schedules()->count();
-                                        $calendarUrl = url('/admin/schedule-calendar');
-
-                                        return new HtmlString("
-                                            <div class='space-y-4'>
-                                                <div class='p-4 bg-gray-900 border border-gray-800 rounded-lg'>
-                                                    <span class='text-2xl font-bold text-amber-400'>{$totalSchedule}</span>
-                                                    <span class='text-xs block text-gray-400 font-medium uppercase'>Yayın Akışı Kaydı</span>
-                                                </div>
-
-                                                <div class='pt-2'>
-                                                    <a href='{$calendarUrl}' class='inline-flex items-center gap-2 px-4 py-2 bg-amber-500 hover:bg-amber-400 text-white text-sm font-semibold rounded-lg transition'>
-                                                        📅 Yayın Akışını Aç
-                                                    </a>
-                                                </div>
-                                            </div>
-                                        ");
-                                    })
-                                    ->columnSpanFull(),
-                            ]),
-
                         Tab::make('🔍 SEO')
                             ->schema([
                                 TextInput::make('meta_title')
