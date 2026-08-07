@@ -159,6 +159,26 @@ class EpisodeResourceTest extends TestCase
             ->assertSet('data.season_number', 3);
     }
 
+    public function test_direct_create_without_context_allows_selecting_program_and_season(): void
+    {
+        Livewire::actingAs($this->admin)
+            ->test(CreateEpisode::class)
+            ->fillForm([
+                'program_id' => $this->program->id,
+                'season_number' => 2,
+                'episode_number' => 1,
+                'title' => 'Doğrudan Eklenen Bölüm',
+            ])
+            ->call('create')
+            ->assertHasNoFormErrors();
+
+        $this->assertDatabaseHas('episodes', [
+            'program_id' => $this->program->id,
+            'season_number' => 2,
+            'title' => 'Doğrudan Eklenen Bölüm',
+        ]);
+    }
+
     public function test_public_program_detail_page_displays_active_published_episodes(): void
     {
         Episode::create([
