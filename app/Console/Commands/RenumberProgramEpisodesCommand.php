@@ -4,8 +4,10 @@ namespace App\Console\Commands;
 
 use App\Models\Episode;
 use App\Models\Program;
+use App\Support\Youtube;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
 class RenumberProgramEpisodesCommand extends Command
@@ -22,7 +24,7 @@ class RenumberProgramEpisodesCommand extends Command
      *
      * @var string
      */
-    protected $description = 'Safely renumber program episodes chronologically by aired_at date.';
+    protected $description = 'Safely renumber program episodes chronologically by YouTube publishedAt date.';
 
     /**
      * Execute the console command.
@@ -59,13 +61,7 @@ class RenumberProgramEpisodesCommand extends Command
         }
 
         $program = $programs->first();
-        $episodes = Episode::where('program_id', $program->id)
-            ->orderByRaw('CASE WHEN aired_at IS NULL THEN 1 ELSE 0 END')
-            ->orderBy('aired_at', 'asc')
-            ->orderBy('created_at', 'asc')
-            ->orderBy('id', 'asc')
-            ->get();
-
+        $episodes = Episode::where('program_id', $program->id)->get();
         $totalCount = $episodes->count();
 
         $this->info("==========================================================");
@@ -82,35 +78,96 @@ class RenumberProgramEpisodesCommand extends Command
             return Command::SUCCESS;
         }
 
-        // Check for NULL aired_at records
-        $nullDateEpisodes = $episodes->filter(fn ($ep) => blank($ep->aired_at));
-        if ($nullDateEpisodes->isNotEmpty()) {
-            $this->warn("DİKKAT: {$nullDateEpisodes->count()} adet bölümün yayın tarihi (aired_at) NULL! Bu kayıtlar listenin sonuna alındı:");
-            foreach ($nullDateEpisodes as $nEp) {
-                $this->line(" - ID: {$nEp->id} | Mevcut No: {$nEp->episode_number} | Başlık: {$nEp->title}");
+        // Fetch authentic YouTube publishedAt from YouTube Data API v3
+        $apiKey = config('services.youtube.key') ?: env('YOUTUBE_API_KEY');
+        $videoIds = [];
+
+        foreach ($episodes as $episode) {
+            $vId = Youtube::extractVideoId($episode->youtube_url);
+            if ($vId) {
+                $videoIds[$vId] = $episode->id;
             }
-            $this->newLine();
         }
+
+        $ytPublishedDates = [];
+        if (! empty($videoIds) && filled($apiKey)) {
+            $chunks = array_chunk(array_keys($videoIds), 50);
+            foreach ($chunks as $chunk) {
+                try {
+                    $response = Http::timeout(10)->get('https://www.googleapis.com/youtube/v3/videos', [
+                        'part' => 'snippet',
+                        'id' => implode(',', $chunk),
+                        'key' => $apiKey,
+                    ]);
+
+                    if ($response->successful()) {
+                        foreach ($response->json('items') ?? [] as $item) {
+                            $vId = $item['id'];
+                            $pubAt = $item['snippet']['publishedAt'] ?? null;
+                            if ($pubAt) {
+                                $ytPublishedDates[$vId] = $pubAt;
+                            }
+                        }
+                    }
+                } catch (\Throwable $e) {
+                    Log::warning("YouTube publishedAt fetch error: {$e->getMessage()}");
+                }
+            }
+        }
+
+        // Attach YouTube publishedAt and prepare sort array
+        $episodeItems = [];
+        foreach ($episodes as $episode) {
+            $vId = Youtube::extractVideoId($episode->youtube_url);
+            $ytDate = $ytPublishedDates[$vId] ?? null;
+
+            $sortTime = PHP_INT_MAX;
+            if ($ytDate) {
+                $sortTime = strtotime($ytDate);
+            } elseif ($episode->aired_at) {
+                $sortTime = strtotime($episode->aired_at->toDateTimeString());
+            }
+
+            $episodeItems[] = [
+                'episode' => $episode,
+                'yt_date_raw' => $ytDate,
+                'yt_date_formatted' => $ytDate ? date('d.m.Y H:i', strtotime($ytDate)) : ($episode->aired_at ? $episode->aired_at->format('d.m.Y') : 'Yok'),
+                'sort_time' => $sortTime,
+            ];
+        }
+
+        // Sort chronologically by YouTube publishedAt ASC (Oldest -> Newest)
+        usort($episodeItems, function ($a, $b) {
+            if ($a['sort_time'] === $b['sort_time']) {
+                return $a['episode']->id <=> $b['episode']->id;
+            }
+            return $a['sort_time'] <=> $b['sort_time'];
+        });
 
         // Generate mapping
         $mapping = [];
         $snapshot = [];
         $newNumber = 1;
 
-        foreach ($episodes as $episode) {
+        foreach ($episodeItems as $item) {
+            $ep = $item['episode'];
+
             $mapping[] = [
-                'id' => $episode->id,
-                'old_num' => $episode->episode_number,
+                'id' => $ep->id,
+                'old_num' => $ep->episode_number,
                 'new_num' => $newNumber,
-                'aired_at' => $episode->aired_at ? $episode->aired_at->format('d.m.Y') : 'Yayın Tarihi Yok',
-                'title' => $episode->title,
+                'yt_date' => $item['yt_date_formatted'],
+                'yt_date_raw' => $item['yt_date_raw'],
+                'title' => $ep->title,
+                'youtube_url' => $ep->youtube_url,
             ];
 
-            $snapshot[$episode->id] = [
-                'old_episode_number' => $episode->episode_number,
+            $snapshot[$ep->id] = [
+                'old_episode_number' => $ep->episode_number,
                 'new_episode_number' => $newNumber,
-                'aired_at' => $episode->aired_at ? $episode->aired_at->format('Y-m-d') : null,
-                'title' => $episode->title,
+                'youtube_published_at' => $item['yt_date_raw'],
+                'title' => $ep->title,
+                'youtube_url' => $ep->youtube_url,
             ];
 
             $newNumber++;
@@ -119,15 +176,17 @@ class RenumberProgramEpisodesCommand extends Command
         // Output table
         $this->newLine();
         $this->info("==========================================================");
-        $this->info("SIRA DÜZELTME PLANž (ESKİ -> YENİ KRONOLOJİK)");
+        $this->info("SIRA DÜZELTME PLANž (YOUTUBE PUBLISHEDAT ASC: ESKİ -> YENİ)");
         $this->info("==========================================================");
 
-        $headers = ['Eski No', 'Yeni No', 'Yayın Tarihi', 'Başlık'];
+        $headers = ['Episode ID', 'Eski No', 'Yeni No', 'YouTube PublishedAt', 'Başlık', 'YouTube URL'];
         $rows = array_map(fn ($m) => [
+            'Episode ID' => $m['id'],
             'Eski No' => $m['old_num'] ?? '-',
             'Yeni No' => $m['new_num'],
-            'Yayın Tarihi' => $m['aired_at'],
-            'Başlık' => mb_strimwidth($m['title'], 0, 45, '...'),
+            'YouTube PublishedAt' => $m['yt_date'],
+            'Başlık' => mb_strimwidth($m['title'], 0, 40, '...'),
+            'YouTube URL' => $m['youtube_url'],
         ], $mapping);
 
         $this->table($headers, $rows);
@@ -158,7 +217,7 @@ class RenumberProgramEpisodesCommand extends Command
                         ->update(['episode_number' => -10000 - $index]);
                 }
 
-                // Phase 2: Assign actual target episode numbers
+                // Phase 2: Assign actual target episode numbers (ONLY episode_number is updated)
                 foreach ($mapping as $item) {
                     DB::table('episodes')
                         ->where('id', $item['id'])
@@ -167,7 +226,7 @@ class RenumberProgramEpisodesCommand extends Command
             });
 
             $this->info("BAŞARILI: {$totalCount} bölüm güncellendi. 0 hata.");
-            Log::info("Program ID {$program->id} ({$program->name}) için {$totalCount} bölümün numaraları yeniden sıralandı.");
+            Log::info("Program ID {$program->id} ({$program->name}) için {$totalCount} bölümün numaraları YouTube publishedAt tarihine göre yeniden sıralandı.");
 
             return Command::SUCCESS;
         } catch (\Throwable $e) {
