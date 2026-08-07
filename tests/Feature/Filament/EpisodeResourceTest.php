@@ -81,6 +81,33 @@ class EpisodeResourceTest extends TestCase
         ]);
     }
 
+    public function test_creating_episode_without_status_and_toggles_assigns_automatic_defaults(): void
+    {
+        Livewire::actingAs($this->admin)
+            ->test(ListEpisodes::class)
+            ->callAction('create', [
+                'program_id' => $this->program->id,
+                'season_number' => 1,
+                'episode_number' => 15,
+                'title' => 'Sadeleştirilmiş Form Bölümü',
+                'slug' => 'sadelestirilmis-form-bolumu',
+                'description' => 'Açıklama',
+                'video_source' => 'youtube',
+                'youtube_url' => 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+            ])
+            ->assertHasNoActionErrors();
+
+        $this->assertDatabaseHas('episodes', [
+            'program_id' => $this->program->id,
+            'title' => 'Sadeleştirilmiş Form Bölümü',
+            'episode_number' => 15,
+            'status' => 'published',
+            'show_on_public' => true,
+            'is_active' => true,
+            'sort_order' => 0,
+        ]);
+    }
+
     public function test_create_episode_prefills_program_id_from_query_parameter(): void
     {
         Livewire::actingAs($this->admin)

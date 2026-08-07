@@ -110,20 +110,6 @@ class YoutubePlaylistImportPage extends Page implements HasForms
                     ->label('Program adını başlıktan kaldır')
                     ->helperText('Örn: "Bab-ı Reyyan | 12. Bölüm" -> "12. Bölüm"')
                     ->default(false),
-
-                Select::make('status')
-                    ->label('Varsayılan Durum')
-                    ->options(Episode::STATUSES)
-                    ->default('published')
-                    ->required(),
-
-                Toggle::make('show_on_public')
-                    ->label('Public Sitede Göster')
-                    ->default(true),
-
-                Toggle::make('is_active')
-                    ->label('Aktif')
-                    ->default(true),
             ])
             ->statePath('data');
     }
@@ -143,9 +129,6 @@ class YoutubePlaylistImportPage extends Page implements HasForms
             'season_number' => $this->season_number,
             'start_episode_number' => $this->start_episode_number ?? 1,
             'strip_program_name' => $this->strip_program_name,
-            'status' => $this->status,
-            'show_on_public' => $this->show_on_public,
-            'is_active' => $this->is_active,
         ]);
     }
 
@@ -334,11 +317,11 @@ class YoutubePlaylistImportPage extends Page implements HasForms
                         'thumbnail' => $item['thumbnail_url'],
                         'video_source' => 'youtube',
                         'youtube_url' => $canonicalUrl,
-                        'status' => $this->status,
-                        'show_on_public' => $this->show_on_public,
-                        'is_active' => $this->is_active && $this->status === 'published' && $this->show_on_public,
+                        'status' => 'published',
+                        'show_on_public' => true,
+                        'is_active' => true,
                         'aired_at' => $item['published_at'],
-                        'sort_order' => $item['position'],
+                        'sort_order' => $item['position'] ?? 0,
                     ]);
 
                     $importedCount++;

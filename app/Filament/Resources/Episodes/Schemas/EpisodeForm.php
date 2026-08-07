@@ -64,26 +64,48 @@ class EpisodeForm
                                     ->rows(4)
                                     ->columnSpanFull(),
 
-                                Grid::make(3)->schema([
-                                    Select::make('status')
-                                        ->label('Bölüm Durumu')
-                                        ->options(Episode::STATUSES)
-                                        ->default('published')
-                                        ->required(),
+                                Placeholder::make('episode_youtube_meta_info')
+                                    ->label('📺 YouTube & Yayın Detayları (Salt Okunur)')
+                                    ->visible(fn ($record) => filled($record))
+                                    ->content(function ($record) {
+                                        if (! $record) {
+                                            return null;
+                                        }
 
-                                    Toggle::make('show_on_public')
-                                        ->label('Public Sitede Göster')
-                                        ->default(true),
+                                        $videoId = \App\Support\Youtube::extractVideoId($record->youtube_url) ?? '-';
+                                        $pubDate = $record->aired_at ? $record->aired_at->format('d.m.Y') : '-';
+                                        $updatedAt = $record->updated_at ? $record->updated_at->format('d.m.Y H:i') : '-';
+                                        $canonicalUrl = $record->canonical_url ?: $record->youtube_url;
 
-                                    Toggle::make('is_active')
-                                        ->label('Aktif')
-                                        ->default(true),
-                                ]),
+                                        $youtubeBtn = filled($canonicalUrl)
+                                            ? "<a href='{$canonicalUrl}' target='_blank' class='inline-flex items-center gap-1.5 px-3 py-1.5 bg-red-600 hover:bg-red-500 text-white font-medium text-xs rounded-lg transition select-none'>
+                                                    <svg class='w-3.5 h-3.5 fill-current' viewBox='0 0 24 24'><path d='M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z'/></svg>
+                                                    YouTube'da Aç ↗
+                                               </a>"
+                                            : "<span class='text-gray-500 text-xs'>-</span>";
 
-                                TextInput::make('sort_order')
-                                    ->label('Sıralama Önceliği')
-                                    ->numeric()
-                                    ->default(0),
+                                        return new HtmlString("
+                                            <div class='grid grid-cols-2 md:grid-cols-4 gap-3 p-4 bg-gray-900 border border-gray-800 rounded-xl text-xs'>
+                                                <div>
+                                                    <span class='text-gray-400 block font-semibold mb-0.5'>🎬 Video ID</span>
+                                                    <span class='font-mono font-bold text-amber-400'>{$videoId}</span>
+                                                </div>
+                                                <div>
+                                                    <span class='text-gray-400 block font-semibold mb-0.5'>📅 Yayın Tarihi</span>
+                                                    <span class='font-medium text-gray-200'>{$pubDate}</span>
+                                                </div>
+                                                <div>
+                                                    <span class='text-gray-400 block font-semibold mb-0.5'>🔄 Son Senkronizasyon</span>
+                                                    <span class='font-mono text-gray-300'>{$updatedAt}</span>
+                                                </div>
+                                                <div>
+                                                    <span class='text-gray-400 block font-semibold mb-0.5'>📺 Bağlantı</span>
+                                                    <div>{$youtubeBtn}</div>
+                                                </div>
+                                            </div>
+                                        ");
+                                    })
+                                    ->columnSpanFull(),
                             ]),
 
                         Tab::make('🎬 Video')

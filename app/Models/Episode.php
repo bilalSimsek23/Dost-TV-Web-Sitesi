@@ -35,6 +35,13 @@ class Episode extends Model
         'meta_description',
     ];
 
+    protected $attributes = [
+        'status' => 'published',
+        'show_on_public' => true,
+        'is_active' => true,
+        'sort_order' => 0,
+    ];
+
     protected $casts = [
         'aired_at' => 'date',
         'is_active' => 'boolean',
@@ -53,6 +60,19 @@ class Episode extends Model
     protected static function booted(): void
     {
         static::saving(function (Episode $episode) {
+            if (blank($episode->status)) {
+                $episode->status = 'published';
+            }
+            if (is_null($episode->show_on_public)) {
+                $episode->show_on_public = true;
+            }
+            if (is_null($episode->is_active)) {
+                $episode->is_active = true;
+            }
+            if (is_null($episode->sort_order)) {
+                $episode->sort_order = 0;
+            }
+
             if (blank($episode->slug)) {
                 $progSlug = $episode->program?->slug ?? 'program';
                 $epTitleSlug = \Illuminate\Support\Str::slug($episode->title ?: "bolum-{$episode->id}");
