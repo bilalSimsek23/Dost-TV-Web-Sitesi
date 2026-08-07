@@ -83,15 +83,24 @@ class ImportDostTvPrograms extends Command
 
             $coverPath = $data['image'] ? $this->downloadImage($data['image'], $slug) : null;
 
-            Program::updateOrCreate(
-                ['slug' => Str::slug($slug)],
-                [
+            $normTitle = mb_strtolower(trim($data['title']), 'UTF-8');
+            $existingProg = Program::whereRaw('LOWER(TRIM(name)) = ?', [$normTitle])->first();
+
+            if ($existingProg) {
+                $existingProg->update([
+                    'description' => $data['description'] ?: $existingProg->description,
+                    'cover_image' => $coverPath ?: $existingProg->cover_image,
+                    'is_active' => true,
+                ]);
+            } else {
+                Program::create([
                     'name' => $data['title'],
+                    'slug' => Str::slug($data['title']),
                     'description' => $data['description'],
                     'cover_image' => $coverPath,
                     'is_active' => true,
-                ]
-            );
+                ]);
+            }
 
             $this->info("İçe aktarıldı: {$data['title']}");
             $imported++;
