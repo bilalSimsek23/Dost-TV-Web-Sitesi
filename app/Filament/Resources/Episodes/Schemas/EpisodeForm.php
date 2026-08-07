@@ -32,13 +32,15 @@ class EpisodeForm
                                     ->relationship('program', 'name')
                                     ->searchable()
                                     ->preload()
-                                    ->required(),
+                                    ->required()
+                                    ->disabled(fn () => request()->has('program_id')),
 
                                 Grid::make(2)->schema([
                                     TextInput::make('season_number')
                                         ->label('Sezon Numarası')
                                         ->numeric()
-                                        ->placeholder('Örn: 1'),
+                                        ->placeholder('Örn: 1')
+                                        ->disabled(fn () => request()->has('season_number')),
 
                                     TextInput::make('episode_number')
                                         ->label('Bölüm Numarası')

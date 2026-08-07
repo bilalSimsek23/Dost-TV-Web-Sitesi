@@ -38,6 +38,14 @@ class EpisodeResourceTest extends TestCase
             ->assertSuccessful();
     }
 
+    public function test_main_episodes_index_has_no_global_create_or_import_header_actions(): void
+    {
+        Livewire::actingAs($this->admin)
+            ->test(ListEpisodes::class)
+            ->assertActionDoesNotExist('create')
+            ->assertActionDoesNotExist('youtube_import');
+    }
+
     public function test_episodes_main_index_groups_by_program_and_season(): void
     {
         $episode = Episode::create([
@@ -51,6 +59,16 @@ class EpisodeResourceTest extends TestCase
         Livewire::actingAs($this->admin)
             ->test(ListEpisodes::class)
             ->assertCanSeeTableRecords([$episode]);
+    }
+
+    public function test_season_detail_mode_has_contextual_create_and_import_header_actions(): void
+    {
+        Livewire::actingAs($this->admin)
+            ->withQueryParams(['program_id' => $this->program->id, 'season_number' => 1])
+            ->test(ListEpisodes::class)
+            ->assertActionExists('create_episode')
+            ->assertActionExists('youtube_import')
+            ->assertActionExists('back_to_main');
     }
 
     public function test_season_detail_mode_filters_episodes_by_program_and_season(): void
@@ -76,29 +94,27 @@ class EpisodeResourceTest extends TestCase
             ->assertCanNotSeeTableRecords([$epB]);
     }
 
-    public function test_can_create_new_episode_with_program_selection_and_seo(): void
+    public function test_can_create_new_episode_with_contextual_program_and_seo(): void
     {
         Livewire::actingAs($this->admin)
-            ->test(ListEpisodes::class)
-            ->callAction('create', [
-                'program_id' => $this->program->id,
-                'season_number' => 1,
+            ->withQueryParams(['program_id' => $this->program->id, 'season_number' => 1])
+            ->test(CreateEpisode::class)
+            ->fillForm([
                 'episode_number' => 12,
                 'title' => 'Harika Bir Bölüm',
                 'slug' => 'harika-bir-bolum',
                 'description' => 'Bölüm detay açıklaması',
                 'video_source' => 'youtube',
                 'youtube_url' => 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
-                'status' => 'published',
-                'show_on_public' => true,
-                'is_active' => true,
                 'meta_title' => 'Harika Bölüm SEO',
                 'meta_description' => 'Harika Bölüm SEO Açıklaması',
             ])
-            ->assertHasNoActionErrors();
+            ->call('create')
+            ->assertHasNoFormErrors();
 
         $this->assertDatabaseHas('episodes', [
             'program_id' => $this->program->id,
+            'season_number' => 1,
             'title' => 'Harika Bir Bölüm',
             'episode_number' => 12,
             'status' => 'published',
@@ -109,10 +125,9 @@ class EpisodeResourceTest extends TestCase
     public function test_creating_episode_without_status_and_toggles_assigns_automatic_defaults(): void
     {
         Livewire::actingAs($this->admin)
-            ->test(ListEpisodes::class)
-            ->callAction('create', [
-                'program_id' => $this->program->id,
-                'season_number' => 1,
+            ->withQueryParams(['program_id' => $this->program->id, 'season_number' => 1])
+            ->test(CreateEpisode::class)
+            ->fillForm([
                 'episode_number' => 15,
                 'title' => 'Sadeleştirilmiş Form Bölümü',
                 'slug' => 'sadelestirilmis-form-bolumu',
@@ -120,10 +135,12 @@ class EpisodeResourceTest extends TestCase
                 'video_source' => 'youtube',
                 'youtube_url' => 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
             ])
-            ->assertHasNoActionErrors();
+            ->call('create')
+            ->assertHasNoFormErrors();
 
         $this->assertDatabaseHas('episodes', [
             'program_id' => $this->program->id,
+            'season_number' => 1,
             'title' => 'Sadeleştirilmiş Form Bölümü',
             'episode_number' => 15,
             'status' => 'published',

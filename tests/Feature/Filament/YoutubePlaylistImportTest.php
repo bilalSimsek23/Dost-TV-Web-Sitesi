@@ -354,4 +354,31 @@ class YoutubePlaylistImportTest extends TestCase
             ->assertSeeHtml('Yeni')
             ->assertDontSeeHtml('YouTube URL</th>');
     }
+
+    public function test_contextual_import_prefills_and_disables_program_and_season_and_calculates_season_specific_max_episode(): void
+    {
+        Episode::create([
+            'program_id' => $this->program->id,
+            'season_number' => 1,
+            'episode_number' => 27,
+            'title' => 'S1 B27',
+            'status' => 'published',
+        ]);
+
+        Episode::create([
+            'program_id' => $this->program->id,
+            'season_number' => 2,
+            'episode_number' => 5,
+            'title' => 'S2 B5',
+            'status' => 'published',
+        ]);
+
+        Livewire::actingAs($this->admin)
+            ->withQueryParams(['program_id' => $this->program->id, 'season_number' => 2])
+            ->test(YoutubePlaylistImportPage::class)
+            ->assertSet('program_id', $this->program->id)
+            ->assertSet('season_number', 2)
+            ->assertSet('isContextual', true)
+            ->assertSet('start_episode_number', 6);
+    }
 }

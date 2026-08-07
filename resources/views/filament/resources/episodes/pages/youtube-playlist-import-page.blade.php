@@ -1,5 +1,19 @@
 <x-filament-panels::page>
     <div class="space-y-6">
+        @if($program_id)
+            <div class="p-4 bg-amber-500/10 border border-amber-500/20 rounded-xl flex items-center justify-between">
+                <div>
+                    <span class="text-xs text-amber-600 dark:text-amber-400 font-semibold uppercase block">İçe Aktarma Hedefi</span>
+                    <span class="text-base font-bold text-gray-900 dark:text-white">
+                        {{ \App\Models\Program::find($program_id)?->name }} — {{ ($season_number && $season_number > 0) ? "Sezon {$season_number}" : 'Sezonsuz' }}
+                    </span>
+                </div>
+                <a href="{{ url('/admin/episodes?program_id=' . $program_id . '&season_number=' . ($season_number ?: 'none')) }}" class="text-xs font-semibold text-amber-600 dark:text-amber-400 hover:underline">
+                    ← Sezon Detayına Dön
+                </a>
+            </div>
+        @endif
+
         <!-- Form Section -->
         <div class="p-6 bg-white rounded-xl shadow-sm border border-gray-200 dark:bg-gray-900 dark:border-gray-800 space-y-6">
             <h3 class="text-lg font-bold text-gray-900 dark:text-white">
@@ -45,7 +59,7 @@
                 <div class="flex flex-wrap gap-3 pt-2">
                     <x-filament::button
                         tag="a"
-                        href="{{ url('/admin/episodes?tableFilters[program_id][value]=' . $program_id) }}"
+                        href="{{ url('/admin/episodes?program_id=' . $program_id . '&season_number=' . ($season_number ?: 'none')) }}"
                         color="success"
                         icon="heroicon-m-film"
                     >

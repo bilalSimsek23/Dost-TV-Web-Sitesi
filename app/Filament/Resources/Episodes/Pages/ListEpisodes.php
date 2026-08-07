@@ -6,7 +6,6 @@ use App\Filament\Resources\Episodes\EpisodeResource;
 use App\Models\Episode;
 use App\Models\Program;
 use Filament\Actions\Action;
-use Filament\Actions\CreateAction;
 use Filament\Resources\Pages\ListRecords;
 
 class ListEpisodes extends ListRecords
@@ -43,8 +42,9 @@ class ListEpisodes extends ListRecords
         $season = request()->query('season_number');
 
         if (filled($programId)) {
-            $createUrl = static::getResource()::getUrl('create') . "?program_id={$programId}"
-                . (filled($season) && $season !== 'none' ? "&season_number={$season}" : '');
+            $seasonQuery = filled($season) && $season !== 'none' ? "&season_number={$season}" : '';
+            $createUrl = static::getResource()::getUrl('create') . "?program_id={$programId}" . $seasonQuery;
+            $importUrl = static::getResource()::getUrl('youtube-import') . "?program_id={$programId}" . $seasonQuery;
 
             return [
                 Action::make('back_to_main')
@@ -57,18 +57,16 @@ class ListEpisodes extends ListRecords
                     ->color('success')
                     ->icon('heroicon-o-plus')
                     ->url($createUrl),
+
+                Action::make('youtube_import')
+                    ->label('YouTube Playlist İçe Aktar')
+                    ->icon('heroicon-o-arrow-down-tray')
+                    ->color('danger')
+                    ->url($importUrl),
             ];
         }
 
-        return [
-            Action::make('youtube_import')
-                ->label('YouTube Playlist İçe Aktar')
-                ->icon('heroicon-o-arrow-down-tray')
-                ->color('danger')
-                ->url(fn (): string => static::getResource()::getUrl('youtube-import')),
-
-            CreateAction::make()
-                ->label('+ Yeni Bölüm'),
-        ];
+        // Global actions removed from main grouped index view
+        return [];
     }
 }

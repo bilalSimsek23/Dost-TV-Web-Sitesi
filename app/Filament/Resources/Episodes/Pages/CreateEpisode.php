@@ -27,4 +27,16 @@ class CreateEpisode extends BaseCreateRecord
             $this->form->fill($data);
         }
     }
+
+    protected function mutateFormDataBeforeCreate(array $data): array
+    {
+        if (request()->has('program_id')) {
+            $data['program_id'] = (int) request()->query('program_id');
+        }
+        if (request()->has('season_number') && request()->query('season_number') !== 'none') {
+            $data['season_number'] = (int) request()->query('season_number');
+        }
+
+        return $data;
+    }
 }
