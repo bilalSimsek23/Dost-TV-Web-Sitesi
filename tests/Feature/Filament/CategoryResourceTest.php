@@ -67,4 +67,33 @@ class CategoryResourceTest extends TestCase
         $this->assertDatabaseHas('programs', ['id' => $program->id]);
         $this->assertDatabaseMissing('category_program', ['category_id' => $category->id]);
     }
+
+    public function test_category_navigation_group_is_under_program_and_video_management(): void
+    {
+        $this->assertEquals('Program ve Video Yönetimi', \App\Filament\Resources\Categories\CategoryResource::getNavigationGroup());
+        $this->assertEquals(1, \App\Filament\Resources\Categories\CategoryResource::getNavigationSort());
+    }
+
+    public function test_sub_category_creation_and_parent_relationship(): void
+    {
+        $parent = Category::create(['name' => 'Dini Programlar', 'slug' => 'dini-programlar']);
+
+        Livewire::actingAs($this->admin)
+            ->test(CreateCategory::class)
+            ->fillForm([
+                'name' => 'Sohbetler',
+                'parent_id' => $parent->id,
+                'show_in_menu' => true,
+                'show_in_mega_menu' => true,
+            ])
+            ->call('create')
+            ->assertHasNoFormErrors();
+
+        $this->assertDatabaseHas('categories', [
+            'name' => 'Sohbetler',
+            'parent_id' => $parent->id,
+            'show_in_menu' => true,
+            'show_in_mega_menu' => true,
+        ]);
+    }
 }

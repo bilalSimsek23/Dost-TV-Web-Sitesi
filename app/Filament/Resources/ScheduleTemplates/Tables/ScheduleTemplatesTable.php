@@ -6,15 +6,12 @@ use App\Models\ScheduleTemplate;
 use Filament\Actions\Action;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\EditAction;
-use Filament\Forms\Components\DatePicker;
-use Filament\Forms\Components\TextInput;
-use Filament\Forms\Components\Toggle;
 use Filament\Notifications\Notification;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
-use Filament\Tables\Filters\TernaryFilter;
 use Filament\Tables\Table;
+use Illuminate\Support\Facades\DB;
 
 class ScheduleTemplatesTable
 {
@@ -40,147 +37,102 @@ class ScheduleTemplatesTable
                     ->sortable()
                     ->placeholder('-'),
 
-                TextColumn::make('status')
+                TextColumn::make('display_status')
                     ->label('Durum')
                     ->badge()
-                    ->formatStateUsing(fn ($state) => ScheduleTemplate::STATUSES[$state] ?? $state)
-                    ->color(fn ($state) => match ($state) {
-                        'published' => 'success',
-                        'draft' => 'warning',
-                        'archived' => 'danger',
+                    ->color(fn (string $state) => match ($state) {
+                        'Gösterimde' => 'success',
+                        'Hazır' => 'gray',
+                        'Taslak' => 'warning',
                         default => 'gray',
                     }),
-
-                TextColumn::make('is_active')
-                    ->label('Varsayılan Dönem')
-                    ->badge()
-                    ->formatStateUsing(fn ($state) => $state ? 'Varsayılan' : '-')
-                    ->color(fn ($state) => $state ? 'success' : 'gray'),
 
                 TextColumn::make('items_count')
                     ->label('Yayın Sayısı')
                     ->counts('items')
                     ->alignEnd(),
             ])
-            ->defaultSort('valid_from', 'desc')
+            ->defaultSort('name', 'asc')
             ->filters([
-                SelectFilter::make('status')
+                SelectFilter::make('status_filter')
                     ->label('Durum')
-                    ->options(ScheduleTemplate::STATUSES),
+                    ->options([
+                        'active' => 'Gösterimde',
+                        'ready' => 'Hazır',
+                        'draft' => 'Taslak',
+                    ])
+                    ->query(function ($query, array $data) {
+                        if (blank($data['value'] ?? null)) {
+                            return $query;
+                        }
 
-                TernaryFilter::make('is_active')
-                    ->label('Varsayılan Dönem'),
+                        return match ($data['value']) {
+                            'active' => $query->where('status', 'published')->where('is_active', true),
+                            'ready' => $query->where('status', 'published')->where('is_active', false),
+                            'draft' => $query->where('status', 'draft')->where('is_active', false),
+                            default => $query,
+                        };
+                    }),
             ])
             ->recordActions([
-                EditAction::make(),
-
+                // 1. Akışı Düzenle (Her durumda görünür)
                 Action::make('open_schedule')
-                    ->label('Yayın Akışını Aç')
-                    ->icon(Heroicon::OutlinedArrowTopRightOnSquare)
+                    ->label('Akışı Düzenle')
+                    ->icon(Heroicon::OutlinedPencilSquare)
                     ->color('amber')
                     ->url(fn (ScheduleTemplate $record) => route('filament.admin.pages.schedule-calendar', ['template' => $record->id])),
 
-                Action::make('copy_template')
-                    ->label('Dönemi Kopyala')
-                    ->icon(Heroicon::OutlinedDocumentDuplicate)
+                // 2. Dönemi Düzenle (Her durumda görünür)
+                EditAction::make()
+                    ->label('Dönemi Düzenle'),
+
+                // 3. Hazır Yap (Yalnız Taslak kayıtta görünür)
+                Action::make('make_ready')
+                    ->label('Hazır Yap')
+                    ->icon(Heroicon::OutlinedCheck)
                     ->color('gray')
-                    ->modalHeading('Dönemi Kopyala')
-                    ->schema([
-                        TextInput::make('new_name')
-                            ->label('Yeni Dönem Adı')
-                            ->default(fn (ScheduleTemplate $record) => $record->name . ' (Kopya)')
-                            ->required(),
-
-                        DatePicker::make('valid_from')
-                            ->label('Yeni Başlangıç Tarihi')
-                            ->default(fn (ScheduleTemplate $record) => $record->valid_from),
-
-                        DatePicker::make('valid_until')
-                            ->label('Yeni Bitiş Tarihi')
-                            ->default(fn (ScheduleTemplate $record) => $record->valid_until),
-
-                        Toggle::make('copy_items')
-                            ->label('Yayınları da Kopyala')
-                            ->default(true),
-                    ])
-                    ->action(function (ScheduleTemplate $record, array $data) {
-                        $newTemplate = ScheduleTemplate::create([
-                            'name' => $data['new_name'],
-                            'slug' => ScheduleTemplate::generateUniqueSlug($data['new_name']),
-                            'description' => $record->description,
-                            'valid_from' => $data['valid_from'] ?? null,
-                            'valid_until' => $data['valid_until'] ?? null,
-                            'status' => 'draft',
-                            'priority' => $record->priority,
-                            'version' => 1,
-                            'is_active' => false,
-                        ]);
-
-                        if (! empty($data['copy_items'])) {
-                            foreach ($record->items as $item) {
-                                $newItem = $item->replicate(['schedule_template_id']);
-                                $newItem->schedule_template_id = $newTemplate->id;
-                                $newItem->save();
-                            }
-                        }
-
-                        Notification::make()
-                            ->title('Yayın dönemi başarıyla kopyalandı.')
-                            ->success()
-                            ->send();
-                    }),
-
-                Action::make('publish')
-                    ->label('Yayına Al')
-                    ->icon(Heroicon::OutlinedCheckCircle)
-                    ->color('success')
-                    ->requiresConfirmation()
-                    ->visible(fn (ScheduleTemplate $record) => $record->status !== 'published')
+                    ->visible(fn (ScheduleTemplate $record) => $record->status === 'draft')
                     ->action(function (ScheduleTemplate $record) {
-                        if ($record->items()->count() === 0) {
-                            Notification::make()
-                                ->title('Uyarı')
-                                ->body('Bu dönemde henüz hiçbir yayın bulunmamaktadır. Lütfen önce yayın ekleyiniz.')
-                                ->warning()
-                                ->send();
-
-                            return;
-                        }
-
-                        ScheduleTemplate::where('id', '!=', $record->id)->update(['is_active' => false]);
-
                         $record->update([
                             'status' => 'published',
-                            'is_active' => true,
-                        ]);
-
-                        Notification::make()
-                            ->title('Yayın dönemi başarıyla yayına alındı.')
-                            ->success()
-                            ->send();
-                    }),
-
-                Action::make('archive')
-                    ->label('Arşivle')
-                    ->icon(Heroicon::OutlinedArchiveBox)
-                    ->color('danger')
-                    ->requiresConfirmation()
-                    ->visible(fn (ScheduleTemplate $record) => $record->status !== 'archived')
-                    ->action(function (ScheduleTemplate $record) {
-                        $record->update([
-                            'status' => 'archived',
                             'is_active' => false,
                         ]);
 
                         Notification::make()
-                            ->title('Yayın dönemi arşivlendi.')
-                            ->info()
+                            ->title('Yayın dönemi hazır duruma getirildi.')
+                            ->success()
                             ->send();
                     }),
 
+                // 3. Gösterimde Yap (Yalnız Hazır kayıtta görünür)
+                Action::make('set_active')
+                    ->label('Gösterimde Yap')
+                    ->icon(Heroicon::OutlinedCheckCircle)
+                    ->color('success')
+                    ->visible(fn (ScheduleTemplate $record) => $record->status === 'published' && ! $record->is_active)
+                    ->action(function (ScheduleTemplate $record) {
+                        DB::transaction(function () use ($record) {
+                            ScheduleTemplate::query()
+                                ->whereKeyNot($record->getKey())
+                                ->update(['is_active' => false]);
+
+                            $record->update([
+                                'status' => 'published',
+                                'is_active' => true,
+                            ]);
+                        });
+
+                        Notification::make()
+                            ->title('Yayın dönemi gösterime alındı.')
+                            ->success()
+                            ->send();
+                    }),
+
+                // 4. Sil (Yalnız Taslak veya Hazır kayıtta görünür, Gösterimde olan gizlidir)
                 DeleteAction::make()
                     ->label('Sil')
-                    ->visible(fn (ScheduleTemplate $record) => $record->status === 'draft' && $record->items()->count() === 0),
+                    ->modalHeading('Bu yayın dönemini silmek istediğinize emin misiniz?')
+                    ->visible(fn (ScheduleTemplate $record) => ! $record->is_active),
             ]);
     }
 }

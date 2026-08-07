@@ -24,6 +24,8 @@ class LiveStreamResource extends Resource
 
     protected static ?string $navigationLabel = 'Canlı Yayın Yönetimi';
 
+    protected static ?int $navigationSort = 30;
+
     protected static ?string $modelLabel = 'Canlı Yayın';
 
     protected static ?string $pluralModelLabel = 'Canlı Yayınlar';

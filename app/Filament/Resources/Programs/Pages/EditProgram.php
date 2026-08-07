@@ -12,6 +12,11 @@ class EditProgram extends EditRecord
 {
     protected static string $resource = ProgramResource::class;
 
+    public function hasCombinedRelationManagerTabsWithForm(): bool
+    {
+        return true;
+    }
+
     protected function getHeaderActions(): array
     {
         return [

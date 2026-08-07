@@ -2,10 +2,10 @@
 
 namespace App\Filament\Resources\FontFamilies\Pages;
 
+use App\Filament\Pages\BaseCreateRecord;
 use App\Filament\Resources\FontFamilies\FontFamilyResource;
-use Filament\Resources\Pages\CreateRecord;
 
-class CreateFontFamily extends CreateRecord
+class CreateFontFamily extends BaseCreateRecord
 {
     protected static string $resource = FontFamilyResource::class;
 }

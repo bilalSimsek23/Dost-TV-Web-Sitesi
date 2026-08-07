@@ -20,7 +20,13 @@ class BannerResource extends Resource
 
     protected static string|\UnitEnum|null $navigationGroup = 'İçerik Yönetimi';
 
-    protected static ?string $navigationLabel = 'Bannerlar';
+    protected static ?string $navigationLabel = 'Görsel İçerikler';
+
+    protected static ?string $modelLabel = 'Görsel İçerik';
+
+    protected static ?string $pluralModelLabel = 'Görsel İçerikler';
+
+    protected static ?int $navigationSort = 2;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;
 

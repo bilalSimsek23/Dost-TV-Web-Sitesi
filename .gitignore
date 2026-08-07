@@ -19,6 +19,9 @@
 /storage/*.key
 /storage/pail
 /vendor
+/scripts/browser_test/node_modules
+/storage/logs/*.json
+/storage/logs/*.log
 Homestead.json
 Homestead.yaml
 Thumbs.db

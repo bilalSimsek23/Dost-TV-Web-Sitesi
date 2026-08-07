@@ -2,10 +2,10 @@
 
 namespace App\Filament\Resources\Schedules\Pages;
 
+use App\Filament\Pages\BaseCreateRecord;
 use App\Filament\Resources\Schedules\ScheduleResource;
-use Filament\Resources\Pages\CreateRecord;
 
-class CreateSchedule extends CreateRecord
+class CreateSchedule extends BaseCreateRecord
 {
     protected static string $resource = ScheduleResource::class;
 }

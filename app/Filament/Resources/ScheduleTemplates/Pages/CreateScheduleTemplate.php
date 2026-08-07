@@ -2,11 +2,11 @@
 
 namespace App\Filament\Resources\ScheduleTemplates\Pages;
 
+use App\Filament\Pages\BaseCreateRecord;
 use App\Filament\Resources\ScheduleTemplates\ScheduleTemplateResource;
 use App\Models\ScheduleTemplate;
-use Filament\Resources\Pages\CreateRecord;
 
-class CreateScheduleTemplate extends CreateRecord
+class CreateScheduleTemplate extends BaseCreateRecord
 {
     protected static string $resource = ScheduleTemplateResource::class;
 

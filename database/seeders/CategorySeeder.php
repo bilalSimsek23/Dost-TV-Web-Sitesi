@@ -9,8 +9,9 @@ class CategorySeeder extends Seeder
 {
     public function run(): void
     {
+        Category::where('slug', Category::ALL_CATEGORIES_SLUG)->delete();
+
         $categories = [
-            ['name' => 'Tüm Kategoriler', 'slug' => 'tum-kategoriler', 'sort_order' => 0],
             ['name' => 'Tefekkür / Dua', 'slug' => 'tefekkur-dua', 'sort_order' => 1],
             ['name' => 'Kur’an-ı Kerim', 'slug' => 'kuran-i-kerim', 'sort_order' => 2],
             ['name' => 'Tefsir', 'slug' => 'tefsir', 'sort_order' => 3],

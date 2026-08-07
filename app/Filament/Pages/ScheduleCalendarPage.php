@@ -52,13 +52,41 @@ class ScheduleCalendarPage extends Page implements HasActions, HasForms, HasTabl
 
     protected static ?string $navigationLabel = 'Yayın Akışı';
 
-    protected static ?int $navigationSort = 1;
+    protected static ?int $navigationSort = 20;
 
     protected static ?string $title = 'Yayın Akışı';
 
     protected static ?string $slug = 'schedule-calendar';
 
     protected string $view = 'filament.pages.schedule-calendar';
+
+    public array $excelPreviewResult = [];
+
+    public function updateExcelPreview($fileState): void
+    {
+        if (empty($fileState)) {
+            $this->excelPreviewResult = [];
+            return;
+        }
+
+        $filePath = is_array($fileState) ? reset($fileState) : $fileState;
+
+        if ($filePath instanceof \Livewire\Features\SupportFileUploads\TemporaryUploadedFile) {
+            $realPath = $filePath->getRealPath();
+        } else {
+            $realPath = \Illuminate\Support\Facades\Storage::disk('local')->path($filePath);
+            if (! file_exists($realPath)) {
+                $realPath = storage_path('app/' . ltrim($filePath, '/'));
+            }
+        }
+
+        if (file_exists($realPath)) {
+            $service = app(\App\Services\Schedule\ScheduleExcelImportService::class);
+            $this->excelPreviewResult = $service->parseAndValidate($realPath);
+        } else {
+            $this->excelPreviewResult = [];
+        }
+    }
 
     public function getMaxContentWidth(): \Filament\Support\Enums\Width | string | null
     {
@@ -75,11 +103,41 @@ class ScheduleCalendarPage extends Page implements HasActions, HasForms, HasTabl
 
     public bool $showTemplateSelector = false;
 
+    protected $queryString = [
+        'selectedTemplateId' => ['except' => null, 'as' => 'template'],
+        'selectedDay' => ['except' => 0, 'as' => 'day'],
+    ];
+
     public function mount(): void
     {
+        if (request()->has('simulated_date')) {
+            try {
+                \Illuminate\Support\Carbon::setTestNow(request()->query('simulated_date'));
+            } catch (\Throwable $e) {
+                // safe fallback
+            }
+        }
+
+        $todayIsoDay = (int) now()->dayOfWeekIso - 1; // 0 = Pazartesi, 6 = Pazar
+        if ($todayIsoDay < 0 || $todayIsoDay > 6) {
+            $todayIsoDay = 0;
+        }
+
+        if (request()->has('day')) {
+            $queryDay = (int) request()->query('day');
+            if ($queryDay >= 0 && $queryDay <= 6) {
+                $this->selectedDay = $queryDay;
+            } else {
+                $this->selectedDay = $todayIsoDay;
+            }
+        } else {
+            $this->selectedDay = $todayIsoDay;
+        }
+        $this->activeDayTab = (string) $this->selectedDay;
+
         if (request()->has('template')) {
             $queryTemplateId = (int) request()->query('template');
-            if (ScheduleTemplate::where('id', $queryTemplateId)->exists()) {
+            if (ScheduleTemplate::where('id', $queryTemplateId)->where('status', '!=', 'archived')->exists()) {
                 $this->selectedTemplateId = $queryTemplateId;
             }
         }
@@ -90,10 +148,13 @@ class ScheduleCalendarPage extends Page implements HasActions, HasForms, HasTabl
 
             if ($template) {
                 $this->selectedTemplateId = $template->id;
+            } else {
+                $fallback = ScheduleTemplate::where('status', '!=', 'archived')->first();
+                if ($fallback) {
+                    $this->selectedTemplateId = $fallback->id;
+                }
             }
         }
-
-        $this->selectedDay = (int) $this->activeDayTab;
     }
 
     public function setViewMode(string $mode): void
@@ -115,7 +176,10 @@ class ScheduleCalendarPage extends Page implements HasActions, HasForms, HasTabl
 
     public function getTemplatesProperty()
     {
-        return app(ScheduleCalendarService::class)->getTemplates();
+        return ScheduleTemplate::query()
+            ->where('status', '!=', 'archived')
+            ->orderBy('name')
+            ->get();
     }
 
     public function getDayCountsProperty(): array
@@ -137,6 +201,13 @@ class ScheduleCalendarPage extends Page implements HasActions, HasForms, HasTabl
     public function updatedSelectedTemplateId($value): void
     {
         $this->selectedTemplateId = (int) $value;
+        $this->resetTable();
+    }
+
+    public function updatedSelectedDay($value): void
+    {
+        $this->selectedDay = (int) $value;
+        $this->activeDayTab = (string) $value;
         $this->resetTable();
     }
 
@@ -175,7 +246,6 @@ class ScheduleCalendarPage extends Page implements HasActions, HasForms, HasTabl
                 return ScheduleTemplateItem::query()
                     ->where('schedule_template_id', $templateId)
                     ->where('day_of_week', $this->selectedDay)
-                    ->where('is_active', true)
                     ->with('program');
             })
             ->columns([
@@ -437,9 +507,15 @@ class ScheduleCalendarPage extends Page implements HasActions, HasForms, HasTabl
                         ->options([
                             'empty' => 'Boş akış oluştur',
                             'copy' => 'Mevcut akıştan kopyala',
+                            'excel' => 'Excel’den aktar',
                         ])
                         ->default('empty')
                         ->live()
+                        ->afterStateUpdated(function ($state) {
+                            if ($state !== 'excel') {
+                                $this->excelPreviewResult = [];
+                            }
+                        })
                         ->required(),
 
                     Select::make('source_template_id')
@@ -448,8 +524,107 @@ class ScheduleCalendarPage extends Page implements HasActions, HasForms, HasTabl
                         ->default(fn () => $this->selectedTemplateId)
                         ->visible(fn ($get) => $get('creation_mode') === 'copy')
                         ->required(fn ($get) => $get('creation_mode') === 'copy'),
+
+                    FileUpload::make('excel_file')
+                        ->label('Excel / CSV Dosyası (.xlsx, .xls, .csv)')
+                        ->disk('local')
+                        ->directory('livewire-tmp')
+                        ->acceptedFileTypes([
+                            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                            'application/vnd.ms-excel',
+                            'text/csv',
+                            'application/csv',
+                            'text/plain',
+                        ])
+                        ->maxSize(10240)
+                        ->visible(fn ($get) => $get('creation_mode') === 'excel')
+                        ->required(fn ($get) => $get('creation_mode') === 'excel')
+                        ->live()
+                        ->afterStateUpdated(fn ($state) => $this->updateExcelPreview($state))
+                        ->helperText('Yayın akışı dosyasını seçtikten sonra aşağıdaki önizleme tablosundan verileri ve durumları kontrol edebilirsiniz.'),
+
+                    \Filament\Forms\Components\ViewField::make('excel_preview')
+                        ->view('filament.pages.schedule-excel-preview')
+                        ->viewData(fn () => ['previewData' => $this->excelPreviewResult])
+                        ->visible(fn ($get) => $get('creation_mode') === 'excel'),
                 ])
                 ->action(function (array $data) {
+                    $creationMode = $data['creation_mode'] ?? 'empty';
+                    $importService = app(\App\Services\Schedule\ScheduleExcelImportService::class);
+
+                    if ($creationMode === 'excel') {
+                        $excelFile = $data['excel_file'] ?? null;
+                        if (empty($excelFile)) {
+                            Notification::make()->title('Lütfen bir Excel dosyası yükleyiniz.')->danger()->send();
+                            return;
+                        }
+
+                        $filePath = is_array($excelFile) ? reset($excelFile) : $excelFile;
+                        if ($filePath instanceof \Livewire\Features\SupportFileUploads\TemporaryUploadedFile) {
+                            $realPath = $filePath->getRealPath();
+                        } else {
+                            $realPath = \Illuminate\Support\Facades\Storage::disk('local')->path($filePath);
+                            if (! file_exists($realPath)) {
+                                $realPath = storage_path('app/' . ltrim($filePath, '/'));
+                            }
+                        }
+
+                        $parsed = $importService->parseAndValidate($realPath);
+                        $this->excelPreviewResult = $parsed;
+
+                        if (! empty($parsed['has_errors'])) {
+                            $errCount = $parsed['error_count'] ?? count($parsed['errors'] ?? []);
+                            $genErr = ! empty($parsed['general_error']) ? ' (' . $parsed['general_error'] . ')' : '';
+
+                            Notification::make()
+                                ->title('Excel İçe Aktarma Engellendi')
+                                ->body('Excel dosyasında ' . $errCount . ' adet hata bulundu' . $genErr . '. Lütfen hataları düzelttikten sonra tekrar deneyin.')
+                                ->danger()
+                                ->persistent()
+                                ->actions([
+                                    Action::make('download_errors')
+                                        ->label('Hata Raporunu İndir (.xlsx)')
+                                        ->color('danger')
+                                        ->openUrlInNewTab()
+                                        ->url(route('schedule.excel.errors', ['key' => base64_encode(json_encode($parsed['errors']))])),
+                                ])
+                                ->send();
+
+                            return;
+                        }
+
+                        if (empty($parsed['rows'])) {
+                            Notification::make()->title('Excel dosyasında aktarılacak geçerli satır bulunamadı.')->warning()->send();
+                            return;
+                        }
+
+                        $template = ScheduleTemplate::create([
+                            'name' => $data['name'],
+                            'slug' => ScheduleTemplate::generateUniqueSlug($data['name']),
+                            'valid_from' => $data['valid_from'] ?? null,
+                            'valid_until' => $data['valid_until'] ?? null,
+                            'status' => 'draft',
+                            'version' => 1,
+                            'is_active' => false,
+                        ]);
+
+                        $importedCount = $importService->importToTemplate($template, $parsed['rows']);
+
+                        $this->selectedTemplateId = $template->id;
+                        $this->excelPreviewResult = [];
+                        $this->resetTable();
+
+                        Notification::make()
+                            ->title('Yayın akışı oluşturuldu. Şimdi bu akışı bir yayın dönemine bağlayabilirsiniz.')
+                            ->body("Toplam {$parsed['total_count']} satırdan {$importedCount} yayın akışı öğesi aktarıldı.")
+                            ->success()
+                            ->send();
+
+                        $this->redirect(route('filament.admin.pages.schedule-calendar', ['template' => $template->id]));
+
+                        return;
+                    }
+
                     $template = ScheduleTemplate::create([
                         'name' => $data['name'],
                         'slug' => ScheduleTemplate::generateUniqueSlug($data['name']),
@@ -460,7 +635,7 @@ class ScheduleCalendarPage extends Page implements HasActions, HasForms, HasTabl
                         'is_active' => false,
                     ]);
 
-                    if (($data['creation_mode'] ?? 'empty') === 'copy' && ! empty($data['source_template_id'])) {
+                    if ($creationMode === 'copy' && ! empty($data['source_template_id'])) {
                         $source = ScheduleTemplate::with('items')->find($data['source_template_id']);
                         if ($source) {
                             foreach ($source->items as $item) {
@@ -475,9 +650,11 @@ class ScheduleCalendarPage extends Page implements HasActions, HasForms, HasTabl
                     $this->resetTable();
 
                     Notification::make()
-                        ->title('"' . $template->name . '" akışı başarıyla oluşturuldu.')
+                        ->title('Yayın akışı oluşturuldu. Şimdi bu akışı bir yayın dönemine bağlayabilirsiniz.')
                         ->success()
                         ->send();
+
+                    $this->redirect(route('filament.admin.pages.schedule-calendar', ['template' => $template->id]));
                 }),
 
             // 3. Yeni Yayın Ekle Header Action

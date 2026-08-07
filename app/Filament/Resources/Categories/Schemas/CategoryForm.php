@@ -23,7 +23,7 @@ class CategoryForm
             ->components([
                 Tabs::make('category-tabs')
                     ->tabs([
-                        Tab::make('Genel')
+                        Tab::make('Genel Bilgiler')
                             ->schema([
                                 TextInput::make('name')
                                     ->label('Kategori Adı')
@@ -32,24 +32,37 @@ class CategoryForm
                                     ->afterStateUpdated(fn ($state, callable $set) => $set('slug', Str::slug($state))),
 
                                 TextInput::make('slug')
-                                    ->label('Slug')
+                                    ->label('Slug (Adres Tanımlayıcı)')
                                     ->required()
                                     ->unique(ignoreRecord: true)
-                                    ->helperText('Boş bırakılırsa isimden otomatik üretilir.'),
+                                    ->helperText('Sayfa web adresinde görünecek metin. Boş bırakılırsa kategori adından otomatik üretilir.'),
 
                                 Select::make('parent_id')
                                     ->label('Üst Kategori')
                                     ->options(function (?Category $record) {
                                         $excludedIds = $record ? [$record->getKey(), ...$record->descendantIds()] : [];
 
-                                        return Category::query()
+                                        $categories = Category::query()
+                                            ->with('parent')
                                             ->where('slug', '!=', Category::ALL_CATEGORIES_SLUG)
                                             ->when($excludedIds, fn ($query) => $query->whereNotIn('id', $excludedIds))
                                             ->orderBy('name')
-                                            ->pluck('name', 'id');
+                                            ->get();
+
+                                        $options = [];
+                                        foreach ($categories as $cat) {
+                                            if ($cat->parent) {
+                                                $options[$cat->id] = "{$cat->parent->name} → {$cat->name} (Alt Kategori)";
+                                            } else {
+                                                $options[$cat->id] = "📁 {$cat->name} (Ana Kategori)";
+                                            }
+                                        }
+
+                                        return $options;
                                     })
                                     ->searchable()
-                                    ->helperText('Bir kategori kendisinin veya kendi alt kategorilerinden birinin üst kategorisi olamaz.'),
+                                    ->placeholder('Yok (Ana Kategori Yap)')
+                                    ->helperText('Üst kategori seçilirse bu kayıt alt kategoriye dönüşür.'),
 
                                 Textarea::make('description')
                                     ->label('Açıklama')
@@ -57,18 +70,12 @@ class CategoryForm
 
                                 Toggle::make('is_active')
                                     ->label('Aktif')
-                                    ->default(true),
-
-                                Toggle::make('show_in_menu')
-                                    ->label('Menüde Göster')
-                                    ->default(true),
-
-                                Toggle::make('show_in_mega_menu')
-                                    ->label('Mega Menüde Göster')
-                                    ->default(true),
+                                    ->default(true)
+                                    ->helperText('Pasif kategoriler sitede ve filtrelerde görüntülenmez.'),
 
                                 Toggle::make('is_featured')
-                                    ->label('Öne Çıkan'),
+                                    ->label('Öne Çıkan')
+                                    ->helperText('Anasayfa veya özel bloklarda öne çıkarılsın.'),
 
                                 TextInput::make('sort_order')
                                     ->label('Sıra')
@@ -76,12 +83,8 @@ class CategoryForm
                                     ->default(0),
                             ]),
 
-                        Tab::make('Görünüm')
+                        Tab::make('Görseller')
                             ->schema([
-                                TextInput::make('icon')
-                                    ->label('İkon')
-                                    ->helperText('Örn: heroicon-o-tag'),
-
                                 FileUpload::make('image')
                                     ->label('Kategori Görseli')
                                     ->image()
@@ -90,6 +93,10 @@ class CategoryForm
                                     ->acceptedFileTypes(['image/jpeg', 'image/png', 'image/webp'])
                                     ->maxSize(5120)
                                     ->helperText('İzin verilen türler: jpg, jpeg, png, webp. Maksimum 5 MB.'),
+
+                                TextInput::make('icon')
+                                    ->label('İkon Kodu')
+                                    ->helperText('Örn: heroicon-o-tag'),
 
                                 ColorPicker::make('text_color')
                                     ->label('Metin Rengi'),
@@ -108,6 +115,19 @@ class CategoryForm
                                         'featured' => 'Öne Çıkan Kart',
                                     ])
                                     ->default('default'),
+                            ]),
+
+                        Tab::make('Menü')
+                            ->schema([
+                                Toggle::make('show_in_menu')
+                                    ->label('Ana Menüde Göster')
+                                    ->default(true)
+                                    ->helperText('Bu kategori sitenin üst navigasyon menüsünde gösterilsin mi?'),
+
+                                Toggle::make('show_in_mega_menu')
+                                    ->label('Mega Menüde Göster')
+                                    ->default(true)
+                                    ->helperText('Bu kategori Programlar açılır mega menüsünde gösterilsin mi?'),
                             ]),
 
                         Tab::make('SEO')

@@ -20,8 +20,25 @@ Route::get('/canli-radyo', [LiveController::class, 'radio'])->name('live.radio')
 use App\Http\Controllers\Admin\CategoryReorderController;
 use App\Http\Controllers\Admin\MenuItemReorderController;
 
-Route::middleware(['web', 'auth'])->post('/admin/categories/reorder', [CategoryReorderController::class, 'reorder'])->name('admin.categories.reorder');
-Route::middleware(['web', 'auth'])->post('/admin/menu-items/reorder', [MenuItemReorderController::class, 'reorder'])->name('admin.menu-items.reorder');
+Route::middleware(['web', 'auth'])->group(function () {
+    Route::post('/admin/categories/reorder', [CategoryReorderController::class, 'reorder'])->name('admin.categories.reorder');
+    Route::post('/admin/menu-items/reorder', [MenuItemReorderController::class, 'reorder'])->name('admin.menu-items.reorder');
+
+    Route::get('/admin/schedule/download-template', function (\App\Services\Schedule\ScheduleExcelImportService $service) {
+        $path = $service->generateSampleTemplate();
+        return response()->download($path, 'Yayın_Akışı_Excel_Şablonu.xlsx')->deleteFileAfterSend(true);
+    })->name('admin.schedule.download-template');
+
+    Route::get('/admin/schedule/download-errors', function (\Illuminate\Http\Request $request, \App\Services\Schedule\ScheduleExcelImportService $service) {
+        $key = $request->query('key');
+        $errors = [];
+        if ($key) {
+            $errors = json_decode(base64_decode($key), true) ?: [];
+        }
+        $path = $service->generateErrorExport($errors);
+        return response()->download($path, 'Yayın_Akışı_İçe_Aktarma_Hataları.xlsx')->deleteFileAfterSend(true);
+    })->name('schedule.excel.errors');
+});
 
 // Statik sayfalar (İletişim, Hakkımızda, Yayın İlkeleri vb.) - en sonda, catch-all olarak
 Route::get('/{page:slug}', [PageController::class, 'show'])->name('pages.show');

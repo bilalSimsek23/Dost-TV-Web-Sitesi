@@ -3,8 +3,10 @@
 namespace Tests\Feature\Filament;
 
 use App\Filament\Resources\Episodes\Pages\CreateEpisode;
+use App\Filament\Resources\Programs\Pages\EditProgram;
 use App\Filament\Resources\Programs\Pages\ListPrograms;
 use App\Filament\Resources\Programs\ProgramResource;
+use App\Filament\Resources\Programs\RelationManagers\EpisodesRelationManager;
 use App\Models\Episode;
 use App\Models\Program;
 use App\Models\Schedule;
@@ -151,4 +153,99 @@ class ProgramResourceTest extends TestCase
         $this->get('/programlar')->assertStatus(200);
         $this->get('/programlar/public-program')->assertStatus(200);
     }
+
+    public function test_turkish_collation_sorting_uses_correct_collate_sql_statement(): void
+    {
+        $query = Program::query();
+        
+        // SQLite test
+        \App\Filament\Resources\Programs\Tables\ProgramsTable::applyTurkishSort($query, 'name', 'asc');
+        $this->assertStringContainsString('LOWER(name) ASC', $query->toSql());
+
+        // Simulated MySQL 8.0 query
+        $mockMysql8Query = \Mockery::mock(\Illuminate\Database\Eloquent\Builder::class)->makePartial();
+        $mockConn = \Mockery::mock(\Illuminate\Database\Connection::class);
+        $mockConn->shouldReceive('getDriverName')->andReturn('mysql');
+        $mockConn->shouldReceive('select')->with('SELECT VERSION() as v')->andReturn([(object)['v' => '8.0.32']]);
+        $mockMysql8Query->shouldReceive('getConnection')->andReturn($mockConn);
+        $mockMysql8Query->shouldReceive('orderByRaw')->with('name COLLATE utf8mb4_tr_0900_ai_ci ASC')->once()->andReturnSelf();
+
+        \App\Filament\Resources\Programs\Tables\ProgramsTable::applyTurkishSort($mockMysql8Query, 'name', 'asc');
+
+        // Simulated MariaDB query
+        $mockMariaQuery = \Mockery::mock(\Illuminate\Database\Eloquent\Builder::class)->makePartial();
+        $mockMariaConn = \Mockery::mock(\Illuminate\Database\Connection::class);
+        $mockMariaConn->shouldReceive('getDriverName')->andReturn('mysql');
+        $mockMariaConn->shouldReceive('select')->with('SELECT VERSION() as v')->andReturn([(object)['v' => '10.6.12-MariaDB']]);
+        $mockMariaQuery->shouldReceive('getConnection')->andReturn($mockMariaConn);
+        $mockMariaQuery->shouldReceive('orderByRaw')->with('name COLLATE utf8mb4_turkish_ci ASC')->once()->andReturnSelf();
+
+        \App\Filament\Resources\Programs\Tables\ProgramsTable::applyTurkishSort($mockMariaQuery, 'name', 'asc');
+    }
+
+    public function test_program_edit_episodes_relation_manager_only_shows_episodes_for_that_program(): void
+    {
+        $programA = Program::create([
+            'name' => 'Program A',
+            'slug' => 'program-a',
+            'status' => 'active',
+        ]);
+
+        $programB = Program::create([
+            'name' => 'Program B',
+            'slug' => 'program-b',
+            'status' => 'active',
+        ]);
+
+        $epA = Episode::create([
+            'program_id' => $programA->id,
+            'title' => 'Program A Bölüm 1',
+            'episode_number' => 1,
+            'status' => 'published',
+        ]);
+
+        $epB = Episode::create([
+            'program_id' => $programB->id,
+            'title' => 'Program B Bölüm 1',
+            'episode_number' => 1,
+            'status' => 'published',
+        ]);
+
+        Livewire::actingAs($this->admin)
+            ->test(EpisodesRelationManager::class, [
+                'ownerRecord' => $programA,
+                'pageClass' => EditProgram::class,
+            ])
+            ->assertCanSeeTableRecords([$epA])
+            ->assertCanNotSeeTableRecords([$epB]);
+    }
+
+    public function test_create_episode_in_relation_manager_defaults_to_owner_program(): void
+    {
+        $program = Program::create([
+            'name' => 'Program X',
+            'slug' => 'program-x',
+            'status' => 'active',
+        ]);
+
+        Livewire::actingAs($this->admin)
+            ->test(EpisodesRelationManager::class, [
+                'ownerRecord' => $program,
+                'pageClass' => EditProgram::class,
+            ])
+            ->callTableAction('create', data: [
+                'title' => 'Yeni Bölüm X',
+                'slug' => 'yeni-bolum-x',
+                'episode_number' => 5,
+                'status' => 'published',
+            ])
+            ->assertHasNoTableActionErrors();
+
+        $this->assertDatabaseHas('episodes', [
+            'program_id' => $program->id,
+            'title' => 'Yeni Bölüm X',
+            'episode_number' => 5,
+        ]);
+    }
 }
+

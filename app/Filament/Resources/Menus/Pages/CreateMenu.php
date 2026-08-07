@@ -2,10 +2,10 @@
 
 namespace App\Filament\Resources\Menus\Pages;
 
+use App\Filament\Pages\BaseCreateRecord;
 use App\Filament\Resources\Menus\MenuResource;
-use Filament\Resources\Pages\CreateRecord;
 
-class CreateMenu extends CreateRecord
+class CreateMenu extends BaseCreateRecord
 {
     protected static string $resource = MenuResource::class;
 }

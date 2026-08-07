@@ -2,59 +2,288 @@
     @php
         $days = \App\Models\Schedule::DAYS;
         $templates = $this->templates;
+        $currentTemplate = $this->selectedTemplate;
+
+        $startOfWeek = \Illuminate\Support\Carbon::now()->startOfWeek(\Illuminate\Support\Carbon::MONDAY);
+
+        $trMonths = ['Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran', 'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık'];
+
+        $activeTemplates = $templates->filter(fn ($t) => $t->is_active || $t->status === 'published');
+        $draftTemplates = $templates->filter(fn ($t) => ! $t->is_active && $t->status !== 'published');
     @endphp
 
-    <div class="w-full space-y-5">
+    <div class="schedule-calendar-ui w-full space-y-4">
+        <style>
+            .schedule-calendar-ui .schedule-toolbar {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: 1rem;
+                flex-wrap: wrap;
+                background-color: #111827;
+                border: 1px solid #1f2937;
+                border-radius: 1rem;
+                padding: 1rem 1.25rem;
+                box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.3);
+            }
 
-        {{-- 1. YAYIN AKIŞI SEÇİMİ (SADECE SELECT KUTUSU) --}}
-        <div class="bg-gray-900 border border-gray-800 rounded-xl p-5 shadow-lg space-y-3">
-            <label for="template-select" class="block text-sm font-bold text-white uppercase tracking-wider">
-                Yayın Akışı
-            </label>
-            <div class="max-w-xl">
-                <select 
-                    id="template-select"
-                    wire:model.live="selectedTemplateId"
-                    class="w-full bg-gray-800 border border-gray-700 text-white font-bold text-sm rounded-lg px-4 py-2.5 shadow-sm focus:border-amber-500 focus:ring-amber-500 cursor-pointer transition"
-                >
-                    @foreach ($templates as $t)
-                        <option value="{{ $t->id }}">
-                            {{ $t->name }}
-                        </option>
-                    @endforeach
-                </select>
+            .schedule-calendar-ui .schedule-toolbar-left {
+                display: flex;
+                align-items: center;
+                gap: 0.75rem;
+                flex-wrap: wrap;
+            }
+
+            .schedule-calendar-ui .schedule-label {
+                font-size: 0.75rem;
+                font-weight: 700;
+                color: #9ca3af;
+                text-transform: uppercase;
+                letter-spacing: 0.05em;
+                white-space: nowrap;
+            }
+
+            .schedule-calendar-ui .schedule-select {
+                min-width: 280px;
+                max-width: 440px;
+                height: 42px;
+                background-color: #1f2937;
+                border: 1px solid #374151;
+                color: #ffffff;
+                border-radius: 0.5rem;
+                padding: 0 1rem;
+                font-size: 0.8125rem;
+                font-weight: 600;
+                cursor: pointer;
+                outline: none;
+                transition: border-color 0.15s ease;
+            }
+
+            .schedule-calendar-ui .schedule-select:focus {
+                border-color: #f59e0b;
+            }
+
+            .schedule-calendar-ui .schedule-badge {
+                display: inline-flex;
+                align-items: center;
+                gap: 0.375rem;
+                padding: 0.375rem 0.75rem;
+                border-radius: 9999px;
+                font-size: 0.75rem;
+                font-weight: 600;
+                border: 1px solid transparent;
+            }
+
+            .schedule-calendar-ui .schedule-badge.is-active {
+                background-color: rgba(16, 185, 129, 0.2);
+                color: #6ee7b7;
+                border-color: rgba(16, 185, 129, 0.3);
+            }
+
+            .schedule-calendar-ui .schedule-badge.is-published {
+                background-color: rgba(16, 185, 129, 0.1);
+                color: #34d399;
+                border-color: rgba(16, 185, 129, 0.2);
+            }
+
+            .schedule-calendar-ui .schedule-badge.is-draft {
+                background-color: rgba(245, 158, 11, 0.2);
+                color: #fcd34d;
+                border-color: rgba(245, 158, 11, 0.3);
+            }
+
+            .schedule-calendar-ui .schedule-dot {
+                width: 0.375rem;
+                height: 0.375rem;
+                border-radius: 9999px;
+            }
+
+            .schedule-calendar-ui .schedule-badge.is-active .schedule-dot,
+            .schedule-calendar-ui .schedule-badge.is-published .schedule-dot {
+                background-color: #34d399;
+            }
+
+            .schedule-calendar-ui .schedule-badge.is-draft .schedule-dot {
+                background-color: #fbbf24;
+            }
+
+            .schedule-calendar-ui .schedule-day-grid {
+                display: grid;
+                grid-template-columns: repeat(7, minmax(0, 1fr));
+                gap: 0.625rem;
+                margin-top: 1rem;
+                margin-bottom: 1.25rem;
+                width: 100%;
+            }
+
+            @media (max-width: 1024px) {
+                .schedule-calendar-ui .schedule-day-grid {
+                    grid-template-columns: repeat(4, minmax(0, 1fr));
+                }
+            }
+
+            @media (max-width: 640px) {
+                .schedule-calendar-ui .schedule-day-grid {
+                    grid-template-columns: repeat(2, minmax(0, 1fr));
+                }
+            }
+
+            .schedule-calendar-ui .schedule-day-card {
+                position: relative;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: center;
+                width: 100%;
+                min-height: 92px;
+                padding: 1.125rem 0.5rem;
+                background-color: #111827;
+                border: 1px solid #1f2937;
+                border-radius: 1rem;
+                text-align: center;
+                cursor: pointer;
+                user-select: none;
+                transition: background-color 0.15s ease, border-color 0.15s ease;
+                outline: none;
+            }
+
+            .schedule-calendar-ui .schedule-day-card:hover {
+                background-color: #1f2937;
+                border-color: #374151;
+            }
+
+            .schedule-calendar-ui .schedule-day-card.is-selected {
+                background-color: #f59e0b;
+                border-color: #fbbf24;
+                color: #020617;
+                box-shadow: 0 4px 6px -1px rgba(245, 158, 11, 0.25);
+            }
+
+            .schedule-calendar-ui .schedule-day-name {
+                display: block;
+                font-size: 0.75rem;
+                font-weight: 900;
+                text-transform: uppercase;
+                letter-spacing: 0.05em;
+                line-height: 1.2;
+            }
+
+            .schedule-calendar-ui .schedule-day-date {
+                display: block;
+                font-size: 0.6875rem;
+                font-weight: 500;
+                margin-top: 0.25rem;
+                opacity: 0.9;
+                line-height: 1.2;
+            }
+
+            .schedule-calendar-ui .schedule-today-badge {
+                position: absolute;
+                top: 0.375rem;
+                right: 0.375rem;
+                padding: 0.125rem 0.375rem;
+                font-size: 0.5625rem;
+                font-weight: 700;
+                text-transform: uppercase;
+                border-radius: 0.25rem;
+                letter-spacing: 0.025em;
+            }
+
+            .schedule-calendar-ui .schedule-day-card:not(.is-selected) .schedule-today-badge {
+                background-color: rgba(245, 158, 11, 0.15);
+                color: #fbbf24;
+                border: 1px solid rgba(245, 158, 11, 0.3);
+            }
+
+            .schedule-calendar-ui .schedule-day-card.is-selected .schedule-today-badge {
+                background-color: rgba(2, 6, 23, 0.25);
+                color: #020617;
+            }
+        </style>
+
+        @if (! $currentTemplate && $templates->isEmpty())
+            {{-- AKTİF DÖNEM VEYA ŞABLON YOKSA SADE BOŞ DURUM --}}
+            <div class="rounded-xl border border-gray-800 bg-gray-900 p-8 text-center shadow-lg space-y-3">
+                <h3 class="text-base font-semibold text-white">Gösterimde olan bir yayın dönemi bulunmuyor.</h3>
+                <p class="text-xs text-gray-400">Yayın akışını düzenlemek için önce bir yayın dönemi oluşturun veya var olan dönemi aktif yapın.</p>
+                <div class="pt-2">
+                    <a 
+                        href="{{ route('filament.admin.resources.schedule-templates.index') }}" 
+                        class="inline-flex items-center gap-2 rounded-lg bg-amber-500 px-4 py-2 text-xs font-bold text-slate-900 hover:bg-amber-400 transition cursor-pointer"
+                    >
+                        <span>Yayın Dönemlerine Git</span>
+                        <span>→</span>
+                    </a>
+                </div>
             </div>
-        </div>
+        @else
+            {{-- 1. AKIŞ SEÇİM KARTI (FULL WIDTH TOOLBAR) --}}
+            <div class="schedule-toolbar">
+                <div class="schedule-toolbar-left">
+                    <span class="schedule-label">AKIŞ SEÇ:</span>
+                    <select 
+                        id="template-select"
+                        wire:model.live="selectedTemplateId"
+                        class="schedule-select"
+                    >
+                        @if($activeTemplates->isNotEmpty())
+                            <optgroup label="Gösterimde / Yayında">
+                                @foreach ($activeTemplates as $t)
+                                    <option value="{{ $t->id }}">
+                                        {{ $t->name }}
+                                    </option>
+                                @endforeach
+                            </optgroup>
+                        @endif
 
-        {{-- 2. GÜN PANELİ (ORTALANMIŞ, EŞİT BOŞLUKLU SEGMENTED DÜĞME KARTI) --}}
-        <div class="bg-gray-900 border border-gray-800 rounded-xl p-6 shadow-lg space-y-4 w-full">
-            <div class="flex items-center justify-center border-b border-gray-800/80 pb-3">
-                <h3 class="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
-                    <span class="text-amber-500 text-base">📅</span>
-                    <span>Yayın Günü</span>
-                </h3>
+                        @if($draftTemplates->isNotEmpty())
+                            <optgroup label="Taslaklar">
+                                @foreach ($draftTemplates as $t)
+                                    <option value="{{ $t->id }}">
+                                        {{ $t->name }}
+                                    </option>
+                                @endforeach
+                            </optgroup>
+                        @endif
+                    </select>
+                </div>
+
+                @if($currentTemplate)
+                    <span class="schedule-badge {{ $currentTemplate->is_active ? 'is-active' : ($currentTemplate->status === 'published' ? 'is-published' : 'is-draft') }}">
+                        <span class="schedule-dot"></span>
+                        <span>{{ $currentTemplate->is_active ? 'Gösterimde' : ($currentTemplate->status === 'published' ? 'Yayında' : 'Taslak') }}</span>
+                    </span>
+                @endif
             </div>
 
-            <div class="flex flex-wrap items-center justify-center gap-3 w-full">
+            {{-- 2. YATAY 7 GÜN KARTLARI GRİDİ (DESKTOP: 7 EŞİT SÜTUN) --}}
+            <div class="schedule-day-grid">
                 @foreach ($days as $idx => $d)
                     @php
-                        $isActive = (int) $this->selectedDay === (int) $idx;
+                        $isDaySelected = (int) $this->selectedDay === (int) $idx;
+                        $cDate = $startOfWeek->copy()->addDays((int) $idx);
+                        $isToday = $cDate->isToday();
+                        $dayDate = $cDate->format('j') . ' ' . $trMonths[$cDate->month - 1];
                     @endphp
                     <button 
                         wire:click="selectDay({{ $idx }})" 
                         type="button" 
-                        class="px-5 py-2.5 text-xs font-bold rounded-xl transition-all duration-200 flex items-center justify-center min-w-[110px] border shadow-sm cursor-pointer select-none {{ $isActive ? 'bg-amber-500 text-white font-black border-amber-600 shadow-md ring-2 ring-amber-400/50 scale-[1.02]' : 'bg-gray-800 text-gray-300 border-gray-700 hover:bg-gray-700 hover:text-white hover:border-gray-600' }}"
+                        class="schedule-day-card {{ $isDaySelected ? 'is-selected' : '' }}"
                     >
-                        {{ $d }}
+                        @if($isToday)
+                            <span class="schedule-today-badge">Bugün</span>
+                        @endif
+
+                        <span class="schedule-day-name">{{ $d }}</span>
+                        <span class="schedule-day-date">{{ $dayDate }}</span>
                     </button>
                 @endforeach
             </div>
-        </div>
 
-        {{-- 3. KOMPAKT YAYIN TABLOSU --}}
-        <div class="w-full">
-            {{ $this->table }}
-        </div>
-
+            {{-- 3. FİLAMENT YAYIN TABLOSU --}}
+            <div class="w-full">
+                {{ $this->table }}
+            </div>
+        @endif
     </div>
 </x-filament-panels::page>

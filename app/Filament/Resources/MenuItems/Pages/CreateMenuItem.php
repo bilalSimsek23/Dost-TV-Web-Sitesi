@@ -2,13 +2,13 @@
 
 namespace App\Filament\Resources\MenuItems\Pages;
 
+use App\Filament\Pages\BaseCreateRecord;
 use App\Filament\Resources\MenuItems\MenuItemResource;
 use App\Models\Menu;
 use App\Services\Menu\ProgramMegaMenuService;
 use App\Support\SiteCache;
-use Filament\Resources\Pages\CreateRecord;
 
-class CreateMenuItem extends CreateRecord
+class CreateMenuItem extends BaseCreateRecord
 {
     protected static string $resource = MenuItemResource::class;
 

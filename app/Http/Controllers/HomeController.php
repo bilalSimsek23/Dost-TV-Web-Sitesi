@@ -2,35 +2,21 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Banner;
-use App\Models\Program;
-use App\Models\SiteSetting;
-use App\Services\Schedule\BroadcastScheduleResolver;
+use App\Services\Home\HomepageDataService;
 use Illuminate\View\View;
 
 class HomeController extends Controller
 {
-    public function index(BroadcastScheduleResolver $resolver): View
+    public function index(HomepageDataService $dataService): View
     {
-        $banners = Banner::query()
-            ->where('is_active', true)
-            ->orderBy('sort_order')
-            ->get();
-
-        $featuredPrograms = Program::query()
-            ->with('categories')
-            ->where('is_active', true)
-            ->orderBy('sort_order')
-            ->limit(8)
-            ->get();
-
-        $todaySchedule = $resolver->getScheduleForDate(now());
+        $data = $dataService->getHomepageData();
 
         return view('home', [
-            'settings' => SiteSetting::current(),
-            'banners' => $banners,
-            'featuredPrograms' => $featuredPrograms,
-            'todaySchedule' => $todaySchedule,
+            'settings' => $data['settings'],
+            'homepageSections' => $data['sections'],
+            'banners' => $data['banners'],
+            'featuredPrograms' => $data['featuredPrograms'],
+            'todaySchedule' => $data['todaySchedule'],
         ]);
     }
 }

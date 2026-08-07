@@ -115,4 +115,17 @@ class NavigationHierarchyTest extends TestCase
             $editResponse->assertOk();
         }
     }
+
+    public function test_program_and_video_management_navigation_sort_order(): void
+    {
+        $this->assertEquals(1, \App\Filament\Resources\Categories\CategoryResource::getNavigationSort());
+        $this->assertEquals(2, \App\Filament\Resources\Programs\ProgramResource::getNavigationSort());
+        $this->assertEquals(3, \App\Filament\Resources\Episodes\EpisodeResource::getNavigationSort());
+        $this->assertEquals(4, \App\Filament\Pages\VideoArchivePage::getNavigationSort());
+
+        $this->assertEquals('Program ve Video Yönetimi', \App\Filament\Resources\Categories\CategoryResource::getNavigationGroup());
+        $this->assertEquals('Program ve Video Yönetimi', \App\Filament\Resources\Programs\ProgramResource::getNavigationGroup());
+        $this->assertEquals('Program ve Video Yönetimi', \App\Filament\Resources\Episodes\EpisodeResource::getNavigationGroup());
+        $this->assertEquals('Program ve Video Yönetimi', \App\Filament\Pages\VideoArchivePage::getNavigationGroup());
+    }
 }

@@ -41,7 +41,7 @@ class ChildrenRelationManager extends RelationManager
                 ->afterStateUpdated(fn ($state, callable $set) => $set('slug', Str::slug($state))),
 
             TextInput::make('slug')
-                ->label('Slug')
+                ->label('Slug (Adres Tanımlayıcı)')
                 ->required()
                 ->unique(ignoreRecord: true),
 

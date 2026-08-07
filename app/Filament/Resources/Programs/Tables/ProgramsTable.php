@@ -9,20 +9,23 @@ use Filament\Actions\EditAction;
 use Filament\Notifications\Notification;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Filters\Filter;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Filters\TernaryFilter;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
 
 class ProgramsTable
 {
     public static function configure(Table $table): Table
     {
         return $table
+            ->defaultSort('name')
             ->columns([
                 TextColumn::make('name')
                     ->label('Program Adı')
                     ->searchable()
-                    ->sortable()
+                    ->sortable(query: fn (Builder $query, string $direction) => static::applyTurkishSort($query, 'name', $direction))
                     ->weight('bold'),
 
                 TextColumn::make('categories.name')
@@ -161,4 +164,35 @@ class ProgramsTable
                     ->visible(fn (Program $record) => $record->episodes()->count() === 0 && $record->schedules()->count() === 0),
             ]);
     }
+
+    public static function applyTurkishSort(Builder $query, string $column = 'name', string $direction = 'asc'): Builder
+    {
+        $direction = strtoupper($direction) === 'DESC' ? 'DESC' : 'ASC';
+        $connection = $query->getConnection();
+        $driver = $connection->getDriverName();
+
+        if ($driver === 'mysql') {
+            $version = '';
+            try {
+                $versionResult = $connection->select('SELECT VERSION() as v');
+                $version = $versionResult[0]->v ?? '';
+            } catch (\Throwable $e) {
+                // Fallback if version check fails
+            }
+
+            $isMariaDb = str_contains(strtolower($version), 'mariadb');
+            $isMysql8 = ! $isMariaDb && version_compare($version, '8.0.0', '>=');
+
+            $collation = $isMysql8 ? 'utf8mb4_tr_0900_ai_ci' : 'utf8mb4_turkish_ci';
+
+            return $query->orderByRaw("{$column} COLLATE {$collation} {$direction}");
+        }
+
+        if ($driver === 'sqlite') {
+            return $query->orderByRaw("LOWER({$column}) {$direction}");
+        }
+
+        return $query->orderBy($column, $direction);
+    }
 }
+

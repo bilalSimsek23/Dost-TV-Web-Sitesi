@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\Episodes\Pages;
 
 use App\Filament\Resources\Episodes\EpisodeResource;
+use Filament\Actions\Action;
 use Filament\Actions\CreateAction;
 use Filament\Resources\Pages\ListRecords;
 
@@ -13,6 +14,12 @@ class ListEpisodes extends ListRecords
     protected function getHeaderActions(): array
     {
         return [
+            Action::make('youtube_import')
+                ->label('YouTube Playlist İçe Aktar')
+                ->icon('heroicon-o-arrow-down-tray')
+                ->color('danger')
+                ->url(fn (): string => static::getResource()::getUrl('youtube-import')),
+
             CreateAction::make(),
         ];
     }

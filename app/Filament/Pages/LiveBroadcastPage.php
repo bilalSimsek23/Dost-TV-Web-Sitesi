@@ -32,7 +32,7 @@ class LiveBroadcastPage extends Page implements HasActions, HasForms
 
     protected static ?string $navigationLabel = 'Canlı Yayın';
 
-    protected static ?int $navigationSort = 3;
+    protected static ?int $navigationSort = 30;
 
     protected static ?string $title = 'Canlı Yayın';
 

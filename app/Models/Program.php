@@ -25,6 +25,8 @@ class Program extends Model
         'program_logo',
         'default_episode_image',
         'trailer_url',
+        'youtube_playlist_url',
+        'last_youtube_sync_at',
         'is_active',
         'is_featured',
         'show_on_public',
@@ -37,6 +39,7 @@ class Program extends Model
         'is_active' => 'boolean',
         'is_featured' => 'boolean',
         'show_on_public' => 'boolean',
+        'last_youtube_sync_at' => 'datetime',
     ];
 
     public const STATUSES = [
@@ -61,8 +64,14 @@ class Program extends Model
             }
         });
 
-        static::saved(fn () => \App\Services\Menu\ProgramMegaMenuService::forgetCache());
-        static::deleted(fn () => \App\Services\Menu\ProgramMegaMenuService::forgetCache());
+        static::saved(function () {
+            \App\Services\Menu\ProgramMegaMenuService::forgetCache();
+            \App\Support\SiteCache::forgetHomeFeaturedPrograms();
+        });
+        static::deleted(function () {
+            \App\Services\Menu\ProgramMegaMenuService::forgetCache();
+            \App\Support\SiteCache::forgetHomeFeaturedPrograms();
+        });
     }
 
     public function getRouteKeyName(): string
@@ -83,6 +92,11 @@ class Program extends Model
     public function categories(): BelongsToMany
     {
         return $this->belongsToMany(Category::class);
+    }
+
+    public function youtubeSyncLogs(): HasMany
+    {
+        return $this->hasMany(YoutubeSyncLog::class);
     }
 
     public function getTrailerEmbedUrlAttribute(): ?string

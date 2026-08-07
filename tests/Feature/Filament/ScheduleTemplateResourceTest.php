@@ -89,108 +89,91 @@ class ScheduleTemplateResourceTest extends TestCase
         $this->assertFalse($template1->fresh()->is_active);
     }
 
-    public function test_duplicate_period_copies_items_independently(): void
+    public function test_row_actions_visibility_for_draft_ready_and_active_states(): void
     {
-        $prog = Program::create(['name' => 'Haberler', 'slug' => 'haberler', 'is_active' => true]);
-        $source = ScheduleTemplate::create([
-            'name' => 'Yaz Dönemi 2026',
+        $draft = ScheduleTemplate::create([
+            'name' => 'Taslak Dönem',
+            'status' => 'draft',
+            'is_active' => false,
+        ]);
+
+        $ready = ScheduleTemplate::create([
+            'name' => 'Hazır Dönem',
+            'status' => 'published',
+            'is_active' => false,
+        ]);
+
+        $active = ScheduleTemplate::create([
+            'name' => 'Gösterimde Dönem',
             'status' => 'published',
             'is_active' => true,
         ]);
 
-        $item = ScheduleTemplateItem::create([
-            'schedule_template_id' => $source->id,
-            'program_id' => $prog->id,
-            'day_of_week' => 1,
-            'start_time' => '19:00',
-            'end_time' => '20:00',
+        // Taslak: open_schedule, edit, make_ready, delete visible; set_active hidden
+        Livewire::actingAs($this->admin)
+            ->test(ListScheduleTemplates::class)
+            ->assertTableActionExists('open_schedule', record: $draft)
+            ->assertTableActionExists('edit', record: $draft)
+            ->assertTableActionExists('make_ready', record: $draft)
+            ->assertTableActionExists('delete', record: $draft)
+            ->assertTableActionHidden('set_active', record: $draft)
+            ->assertTableActionDoesNotExist('copy_template', record: $draft)
+            ->assertTableActionDoesNotExist('archive', record: $draft)
+            ->assertTableActionDoesNotExist('publish', record: $draft);
+
+        // Hazır: open_schedule, edit, set_active, delete visible; make_ready hidden
+        Livewire::actingAs($this->admin)
+            ->test(ListScheduleTemplates::class)
+            ->assertTableActionExists('open_schedule', record: $ready)
+            ->assertTableActionExists('edit', record: $ready)
+            ->assertTableActionExists('set_active', record: $ready)
+            ->assertTableActionExists('delete', record: $ready)
+            ->assertTableActionHidden('make_ready', record: $ready);
+
+        // Gösterimde: open_schedule, edit visible; make_ready, set_active, delete hidden
+        Livewire::actingAs($this->admin)
+            ->test(ListScheduleTemplates::class)
+            ->assertTableActionExists('open_schedule', record: $active)
+            ->assertTableActionExists('edit', record: $active)
+            ->assertTableActionHidden('make_ready', record: $active)
+            ->assertTableActionHidden('set_active', record: $active)
+            ->assertTableActionHidden('delete', record: $active);
+    }
+
+    public function test_make_ready_transitions_draft_to_ready(): void
+    {
+        $template = ScheduleTemplate::create([
+            'name' => 'Taslak Dönem',
+            'status' => 'draft',
+            'is_active' => false,
         ]);
 
         Livewire::actingAs($this->admin)
             ->test(ListScheduleTemplates::class)
-            ->callTableAction('copy_template', $source, [
-                'new_name' => 'Kış Dönemi 2026',
-                'valid_from' => '2026-09-01',
-                'valid_until' => '2026-12-31',
-                'copy_items' => true,
-            ])
+            ->callTableAction('make_ready', $template)
             ->assertHasNoTableActionErrors();
 
-        $copy = ScheduleTemplate::where('name', 'Kış Dönemi 2026')->first();
-        $this->assertNotNull($copy);
-        $this->assertEquals('draft', $copy->status);
-        $this->assertFalse($copy->is_active);
-        $this->assertEquals(1, $copy->items()->count());
-
-        // Source template is unmutated
-        $this->assertEquals('Yaz Dönemi 2026', $source->fresh()->name);
-        $this->assertEquals(1, $source->fresh()->items()->count());
+        $this->assertEquals('published', $template->fresh()->status);
+        $this->assertFalse($template->fresh()->is_active);
+        $this->assertEquals('Hazır', $template->fresh()->display_status);
     }
 
-    public function test_publishing_empty_period_shows_warning(): void
+    public function test_set_active_transitions_ready_to_active(): void
     {
-        $emptyTemplate = ScheduleTemplate::create([
-            'name' => 'Boş Dönem',
-            'status' => 'draft',
-            'is_active' => false,
-        ]);
-
-        Livewire::actingAs($this->admin)
-            ->test(ListScheduleTemplates::class)
-            ->callTableAction('publish', $emptyTemplate);
-
-        $this->assertEquals('draft', $emptyTemplate->fresh()->status);
-    }
-
-    public function test_publishing_period_with_items_succeeds(): void
-    {
-        $prog = Program::create(['name' => 'Dost Sohbeti', 'slug' => 'dost-sohbeti', 'is_active' => true]);
         $template = ScheduleTemplate::create([
-            'name' => 'Dolu Dönem',
-            'status' => 'draft',
+            'name' => 'Hazır Dönem',
+            'status' => 'published',
             'is_active' => false,
-        ]);
-
-        ScheduleTemplateItem::create([
-            'schedule_template_id' => $template->id,
-            'program_id' => $prog->id,
-            'day_of_week' => 0,
-            'start_time' => '10:00',
         ]);
 
         Livewire::actingAs($this->admin)
             ->test(ListScheduleTemplates::class)
-            ->callTableAction('publish', $template)
+            ->callTableAction('set_active', $template)
             ->assertHasNoTableActionErrors();
 
         $this->assertEquals('published', $template->fresh()->status);
         $this->assertTrue($template->fresh()->is_active);
-    }
-
-    public function test_period_archiving_preserves_broadcast_items(): void
-    {
-        $prog = Program::create(['name' => 'Arşiv Programı', 'slug' => 'arsiv-prog', 'is_active' => true]);
-        $template = ScheduleTemplate::create([
-            'name' => 'Eski Dönem 2025',
-            'status' => 'published',
-            'is_active' => true,
-        ]);
-
-        $item = ScheduleTemplateItem::create([
-            'schedule_template_id' => $template->id,
-            'program_id' => $prog->id,
-            'day_of_week' => 2,
-            'start_time' => '15:00',
-        ]);
-
-        Livewire::actingAs($this->admin)
-            ->test(ListScheduleTemplates::class)
-            ->callTableAction('archive', $template)
-            ->assertHasNoTableActionErrors();
-
-        $this->assertEquals('archived', $template->fresh()->status);
-        $this->assertFalse($template->fresh()->is_active);
-        $this->assertDatabaseHas('schedule_template_items', ['id' => $item->id]);
+        $this->assertEquals('Gösterimde', $template->fresh()->display_status);
     }
 
     public function test_schedule_calendar_page_opens_selected_template_from_query_parameter(): void

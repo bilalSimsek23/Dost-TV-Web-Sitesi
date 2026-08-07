@@ -2,10 +2,10 @@
 
 namespace App\Filament\Resources\Banners\Pages;
 
+use App\Filament\Pages\BaseCreateRecord;
 use App\Filament\Resources\Banners\BannerResource;
-use Filament\Resources\Pages\CreateRecord;
 
-class CreateBanner extends CreateRecord
+class CreateBanner extends BaseCreateRecord
 {
     protected static string $resource = BannerResource::class;
 }

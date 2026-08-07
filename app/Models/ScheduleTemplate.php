@@ -15,7 +15,7 @@ class ScheduleTemplate extends Model
         'version' => 1,
         'status' => 'draft',
         'priority' => 1,
-        'is_active' => true,
+        'is_active' => false,
     ];
 
     protected $fillable = [
@@ -40,9 +40,22 @@ class ScheduleTemplate extends Model
 
     public const STATUSES = [
         'draft' => 'Taslak',
-        'published' => 'Yayında',
-        'archived' => 'Arşivlendi',
+        'ready' => 'Hazır',
+        'active' => 'Gösterimde',
     ];
+
+    public function getDisplayStatusAttribute(): string
+    {
+        if ($this->is_active && $this->status === 'published') {
+            return 'Gösterimde';
+        }
+
+        if (! $this->is_active && $this->status === 'published') {
+            return 'Hazır';
+        }
+
+        return 'Taslak';
+    }
 
     public static function generateUniqueSlug(string $name, ?int $ignoreId = null): string
     {

@@ -24,21 +24,12 @@
 
         <div class="mt-10 grid grid-cols-2 gap-6 sm:grid-cols-3 lg:grid-cols-4">
             @forelse ($programs as $program)
-                <a href="{{ route('programs.show', $program) }}" class="group">
-                    <div class="aspect-[3/4] overflow-hidden rounded-xl bg-slate-900 ring-1 ring-white/10">
-                        @if ($program->cover_image)
-                            <img src="{{ asset('storage/' . $program->cover_image) }}" alt="{{ $program->name }}"
-                                 class="h-full w-full object-cover transition duration-300 group-hover:scale-105">
-                        @else
-                            <div class="flex h-full w-full items-center justify-center text-4xl font-black text-slate-700">
-                                {{ mb_substr($program->name, 0, 1) }}
-                            </div>
-                        @endif
-                    </div>
-                    <p class="mt-3 font-semibold text-white group-hover:text-rose-300">{{ $program->name }}</p>
-                    @if ($program->categories->isNotEmpty())
-                        <p class="text-xs text-slate-500">{{ $program->categories->pluck('name')->join(', ') }}</p>
-                    @endif
+                <a href="{{ route('programs.show', $program) }}" class="block">
+                    <x-site.program-card
+                        :title="$program->name"
+                        :cover-image="$program->cover_image"
+                        :categories="$program->categories->pluck('name')->toArray()"
+                    />
                 </a>
             @empty
                 <p class="col-span-full text-slate-500">Bu kategoride henüz program eklenmedi.</p>

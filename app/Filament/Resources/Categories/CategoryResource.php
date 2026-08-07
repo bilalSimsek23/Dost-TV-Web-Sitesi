@@ -29,9 +29,9 @@ class CategoryResource extends Resource
         return true;
     }
 
-    protected static string|\UnitEnum|null $navigationGroup = 'İçerik Yönetimi';
+    protected static string|\UnitEnum|null $navigationGroup = 'Program ve Video Yönetimi';
 
-    protected static ?int $navigationSort = 3;
+    protected static ?int $navigationSort = 1;
 
     protected static ?string $navigationLabel = 'Kategoriler';
 

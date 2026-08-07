@@ -67,7 +67,7 @@ class ProgramForm
                                         ->default(false),
                                 ]),
 
-                                Grid::make(2)->schema([
+                                Grid::make(3)->schema([
                                     TextInput::make('sort_order')
                                         ->label('Sıralama Önceliği')
                                         ->numeric()
@@ -77,6 +77,34 @@ class ProgramForm
                                         ->label('Tanıtım Fragmanı (YouTube URL)')
                                         ->placeholder('https://www.youtube.com/watch?v=...')
                                         ->url(),
+
+                                    TextInput::make('youtube_playlist_url')
+                                        ->label('YouTube Playlist URL')
+                                        ->placeholder('https://www.youtube.com/playlist?list=...')
+                                        ->url()
+                                        ->rule(function () {
+                                            return function (string $attribute, $value, \Closure $fail) {
+                                                if (blank($value)) {
+                                                    return;
+                                                }
+
+                                                if (! str_contains($value, 'youtube.com') && ! str_contains($value, 'youtu.be')) {
+                                                    $fail('Lütfen geçerli bir YouTube playlist bağlantısı girin.');
+                                                    return;
+                                                }
+
+                                                if (preg_match('/(?:watch\?v=|youtu\.be\/|shorts\/)/i', $value) && ! str_contains($value, 'list=')) {
+                                                    $fail('Lütfen bir YouTube playlist bağlantısı girin. (Tekil video bağlantıları kabul edilmez)');
+                                                    return;
+                                                }
+
+                                                $playlistId = \App\Support\Youtube::extractPlaylistId($value);
+                                                if (! $playlistId) {
+                                                    $fail('Lütfen geçerli bir YouTube playlist bağlantısı girin.');
+                                                }
+                                            };
+                                        })
+                                        ->helperText('Otomatik bölüm senkronizasyonu için ana playlist bağlantısı'),
                                 ]),
                             ]),
 
@@ -121,7 +149,7 @@ class ProgramForm
                             ->schema([
                                 Select::make('categories')
                                     ->label('Kategoriler')
-                                    ->relationship('categories', 'name')
+                                    ->relationship('categories', 'name', fn ($query) => $query->where('slug', '!=', \App\Models\Category::ALL_CATEGORIES_SLUG))
                                     ->multiple()
                                     ->searchable()
                                     ->preload()
@@ -131,59 +159,6 @@ class ProgramForm
                                             ->label('Kategori Adı')
                                             ->required(),
                                     ]),
-                            ]),
-
-                        Tab::make('🎞️ Bölümler')
-                            ->schema([
-                                Placeholder::make('episodes_summary')
-                                    ->label('Bölüm Yönetimi Özeti')
-                                    ->content(function ($record) {
-                                        if (! $record) {
-                                            return new HtmlString('<div class="p-4 bg-gray-800 rounded-lg text-sm text-gray-400">Bölümleri görmek ve eklemek için önce programı kaydediniz.</div>');
-                                        }
-
-                                        $total = $record->episodes()->count();
-                                        $episodes = $record->episodes()->latest()->take(5)->get();
-
-                                        $list = '';
-                                        foreach ($episodes as $ep) {
-                                            $date = $ep->aired_at ? $ep->aired_at->format('d.m.Y') : 'Tarih Yok';
-                                            $list .= "<li class='py-1 border-b border-gray-700/50 flex justify-between text-sm'><span class='font-medium text-white'>{$ep->title}</span><span class='text-gray-400'>{$date}</span></li>";
-                                        }
-
-                                        if (blank($list)) {
-                                            $list = "<li class='py-2 text-sm text-gray-500 italic'>Bu programa henüz bir bölüm eklenmedi.</li>";
-                                        }
-
-                                        $openUrl = url("/admin/episodes?tableFilters[program_id][value]={$record->id}");
-                                        $addUrl = url("/admin/episodes/create?program_id={$record->id}");
-
-                                        return new HtmlString("
-                                            <div class='space-y-4'>
-                                                <div class='flex items-center gap-6 p-4 bg-gray-900 border border-gray-800 rounded-lg'>
-                                                    <div>
-                                                        <span class='text-2xl font-bold text-amber-400'>{$total}</span>
-                                                        <span class='text-xs block text-gray-400 font-medium uppercase'>Toplam Bölüm</span>
-                                                    </div>
-                                                </div>
-
-                                                <div>
-                                                    <h4 class='text-sm font-semibold text-gray-300 mb-2'>Son Eklenen 5 Bölüm:</h4>
-                                                    <ul class='bg-gray-900 border border-gray-800 rounded-lg p-3'>{$list}</ul>
-                                                </div>
-
-                                                <div class='flex items-center gap-3 pt-2'>
-                                                    <a href='{$openUrl}' class='inline-flex items-center gap-2 px-4 py-2 bg-gray-800 hover:bg-gray-700 text-white text-sm font-semibold rounded-lg border border-gray-700 transition'>
-                                                        📂 Tüm Bölümleri Aç
-                                                    </a>
-                                                    <a href='{$addUrl}' class='inline-flex items-center gap-2 px-4 py-2 bg-amber-500 hover:bg-amber-400 text-white text-sm font-semibold rounded-lg transition'>
-                                                        ➕ Yeni Bölüm Ekle
-                                                    </a>
-                                                </div>
-                                            </div>
-                                        ");
-                                    })
-                                    ->columnSpanFull(),
                             ]),
 
                         Tab::make('📡 Yayın Bilgileri')
@@ -226,6 +201,22 @@ class ProgramForm
                                     ->label('Google Arama Açıklaması (Meta Description)')
                                     ->rows(3)
                                     ->placeholder('Programın Google arama sonuçlarında görünecek kısa özeti'),
+                            ]),
+
+                        Tab::make('Önizleme')
+                            ->schema([
+                                Placeholder::make('program_preview')
+                                    ->hiddenLabel()
+                                    ->content(function (?Program $record, callable $get) {
+                                        $coverImage = $get('cover_image') ?? ($record ? $record->cover_image : null);
+
+                                        return view('components.site.program-card', [
+                                            'preview' => true,
+                                            'title' => $get('name') ?? ($record ? $record->name : 'Program Adı'),
+                                            'coverImage' => $coverImage,
+                                        ]);
+                                    })
+                                    ->columnSpanFull(),
                             ]),
                     ])
                     ->columnSpanFull(),

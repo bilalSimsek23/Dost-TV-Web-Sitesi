@@ -5,6 +5,7 @@ namespace App\Filament\Resources\Episodes;
 use App\Filament\Resources\Episodes\Pages\CreateEpisode;
 use App\Filament\Resources\Episodes\Pages\EditEpisode;
 use App\Filament\Resources\Episodes\Pages\ListEpisodes;
+use App\Filament\Resources\Episodes\Pages\YoutubePlaylistImportPage;
 use App\Filament\Resources\Episodes\Schemas\EpisodeForm;
 use App\Filament\Resources\Episodes\Tables\EpisodesTable;
 use App\Models\Episode;
@@ -18,9 +19,15 @@ class EpisodeResource extends Resource
 {
     protected static ?string $model = Episode::class;
 
-    protected static string|\UnitEnum|null $navigationGroup = 'İçerik Yönetimi';
+    protected static string|\UnitEnum|null $navigationGroup = 'Program ve Video Yönetimi';
 
     protected static ?string $navigationLabel = 'Bölümler';
+
+    protected static ?int $navigationSort = 3;
+
+    protected static ?string $modelLabel = 'Bölüm';
+
+    protected static ?string $pluralModelLabel = 'Bölümler';
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedFilm;
 
@@ -47,6 +54,7 @@ class EpisodeResource extends Resource
             'index' => ListEpisodes::route('/'),
             'create' => CreateEpisode::route('/create'),
             'edit' => EditEpisode::route('/{record}/edit'),
+            'youtube-import' => YoutubePlaylistImportPage::route('/youtube-import'),
         ];
     }
 }

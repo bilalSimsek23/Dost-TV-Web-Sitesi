@@ -38,40 +38,25 @@ class CategoriesTable
                     ->html(),
 
                 TextColumn::make('name')
-                    ->label('Kategori Adı')
+                    ->label('Kategori')
                     ->searchable()
                     ->sortable(),
 
                 TextColumn::make('parent.name')
                     ->label('Üst Kategori')
-                    ->placeholder('—')
+                    ->placeholder('Ana Kategori')
                     ->sortable(),
 
-                TextColumn::make('slug')
-                    ->label('Slug')
-                    ->searchable(),
+                TextColumn::make('programs_count')
+                    ->label('Program Sayısı')
+                    ->counts('programs')
+                    ->sortable(),
+
+                ToggleColumn::make('show_in_menu')
+                    ->label('Menü'),
 
                 ToggleColumn::make('is_active')
                     ->label('Aktif'),
-
-                ToggleColumn::make('show_in_menu')
-                    ->label('Menüde Göster'),
-
-                ToggleColumn::make('is_featured')
-                    ->label('Öne Çıkan'),
-
-                TextColumn::make('children_count')
-                    ->label('Alt Kategori Sayısı')
-                    ->counts('children'),
-
-                TextColumn::make('programs_count')
-                    ->label('Bağlı Program Sayısı')
-                    ->counts('programs'),
-
-                TextColumn::make('updated_at')
-                    ->label('Güncellenme Tarihi')
-                    ->dateTime()
-                    ->sortable(),
             ])
             ->defaultSort('sort_order')
             ->filters([

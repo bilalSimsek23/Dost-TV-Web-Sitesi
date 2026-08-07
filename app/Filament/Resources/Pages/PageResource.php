@@ -20,9 +20,20 @@ class PageResource extends Resource
 
     protected static string|\UnitEnum|null $navigationGroup = 'İçerik Yönetimi';
 
-    protected static ?string $navigationLabel = 'Sayfalar';
+    protected static ?string $navigationLabel = 'Kurumsal Bilgiler';
+
+    protected static ?string $modelLabel = 'Kurumsal Bilgi';
+
+    protected static ?string $pluralModelLabel = 'Kurumsal Bilgiler';
+
+    protected static ?int $navigationSort = 1;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedDocumentText;
+
+    public static function shouldRegisterNavigation(): bool
+    {
+        return false;
+    }
 
     public static function form(Schema $schema): Schema
     {

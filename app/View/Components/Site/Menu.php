@@ -29,7 +29,7 @@ class Menu extends Component
     {
         return view('components.site.menu', [
             'megaMenuCategories' => $this->megaMenuData['categories'] ?? collect(),
-            'megaMenuAllPrograms' => $this->megaMenuData['all_programs'] ?? collect(),
+            'megaMenuCategoryDetails' => $this->megaMenuData['category_details'] ?? [],
         ]);
     }
 }
