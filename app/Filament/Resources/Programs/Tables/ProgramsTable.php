@@ -9,7 +9,6 @@ use Filament\Actions\EditAction;
 use Filament\Notifications\Notification;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
-use Filament\Tables\Filters\Filter;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Filters\TernaryFilter;
 use Filament\Tables\Table;
@@ -49,15 +48,27 @@ class ProgramsTable
                 TextColumn::make('episodes_count')
                     ->label('Bölüm Sayısı')
                     ->counts('episodes')
+                    ->formatStateUsing(fn ($state) => "{$state} Bölüm")
+                    ->url(fn (Program $record) => url("/admin/programs/{$record->id}/edit"))
                     ->sortable(),
 
-                IconColumn::make('show_on_public')
+                TextColumn::make('show_on_public')
                     ->label('Public')
-                    ->boolean()
-                    ->trueIcon('heroicon-o-eye')
-                    ->falseIcon('heroicon-o-eye-slash')
-                    ->trueColor('success')
-                    ->falseColor('gray'),
+                    ->badge()
+                    ->formatStateUsing(fn ($state) => $state ? '👁 Yayında' : '⊘ Pasif')
+                    ->color(fn ($state) => $state ? 'success' : 'gray')
+                    ->action(function (Program $record) {
+                        $newPublic = ! $record->show_on_public;
+                        $record->update([
+                            'show_on_public' => $newPublic,
+                            'is_active' => $newPublic,
+                        ]);
+                        Notification::make()
+                            ->title("{$record->name} " . ($newPublic ? 'yayına alındı (Yayında).' : 'pasife alındı.'))
+                            ->success()
+                            ->send();
+                    })
+                    ->tooltip('Görünürlüğü değiştirmek için tıklayın'),
 
                 IconColumn::make('is_featured')
                     ->label('Öne Çıkan')
@@ -91,24 +102,6 @@ class ProgramsTable
                     ->color('gray')
                     ->url(fn (Program $record) => route('programs.show', $record))
                     ->openUrlInNewTab(),
-
-                Action::make('open_episodes')
-                    ->label('Bölümleri Aç')
-                    ->icon('heroicon-o-film')
-                    ->color('amber')
-                    ->url(fn (Program $record) => url("/admin/episodes?tableFilters[program_id][value]={$record->id}")),
-
-                Action::make('add_episode')
-                    ->label('Yeni Bölüm Ekle')
-                    ->icon('heroicon-o-plus-circle')
-                    ->color('success')
-                    ->url(fn (Program $record) => url("/admin/episodes/create?program_id={$record->id}")),
-
-                Action::make('open_schedule')
-                    ->label('Yayın Akışını Aç')
-                    ->icon('heroicon-o-calendar')
-                    ->color('info')
-                    ->url(fn () => url('/admin/schedule-calendar')),
 
                 Action::make('archive')
                     ->label('Arşivle')
@@ -145,22 +138,8 @@ class ProgramsTable
                             ->send();
                     }),
 
-                Action::make('toggle_public')
-                    ->label(fn (Program $record) => $record->show_on_public ? 'Pasife Al' : 'Aktif Et')
-                    ->icon(fn (Program $record) => $record->show_on_public ? 'heroicon-o-eye-slash' : 'heroicon-o-eye')
-                    ->color(fn (Program $record) => $record->show_on_public ? 'gray' : 'success')
-                    ->action(function (Program $record) {
-                        $newPublic = ! $record->show_on_public;
-                        $record->update([
-                            'show_on_public' => $newPublic,
-                            'is_active' => $newPublic && $record->status === 'active',
-                        ]);
-                        Notification::make()
-                            ->title("{$record->name} public görünürlüğü güncellendi.")
-                            ->send();
-                    }),
-
                 DeleteAction::make()
+                    ->requiresConfirmation()
                     ->visible(fn (Program $record) => $record->episodes()->count() === 0 && $record->schedules()->count() === 0),
             ]);
     }
@@ -195,4 +174,3 @@ class ProgramsTable
         return $query->orderBy($column, $direction);
     }
 }
-

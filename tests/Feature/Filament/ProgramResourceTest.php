@@ -48,7 +48,7 @@ class ProgramResourceTest extends TestCase
             ->assertCanSeeTableRecords([$program]);
     }
 
-    public function test_can_create_new_program_with_status_and_seo(): void
+    public function test_can_create_new_program_through_simplified_form(): void
     {
         Livewire::actingAs($this->admin)
             ->test(ListPrograms::class)
@@ -57,10 +57,7 @@ class ProgramResourceTest extends TestCase
                 'slug' => 'yeni-program',
                 'short_description' => 'Kısa açıklama metni',
                 'description' => 'Detaylı açıklama metni',
-                'status' => 'season_break',
-                'show_on_public' => true,
                 'is_featured' => true,
-                'sort_order' => 1,
                 'meta_title' => 'Yeni Program SEO Başlığı',
                 'meta_description' => 'Yeni Program SEO Açıklaması',
             ])
@@ -68,7 +65,9 @@ class ProgramResourceTest extends TestCase
 
         $this->assertDatabaseHas('programs', [
             'name' => 'Yeni Program',
-            'status' => 'season_break',
+            'status' => 'active',
+            'show_on_public' => true,
+            'is_active' => true,
             'meta_title' => 'Yeni Program SEO Başlığı',
             'meta_description' => 'Yeni Program SEO Açıklaması',
             'is_featured' => true,
@@ -126,6 +125,44 @@ class ProgramResourceTest extends TestCase
             ->assertTableActionHidden('delete', $program);
     }
 
+    public function test_removed_program_table_actions_are_not_rendered(): void
+    {
+        $program = Program::create([
+            'name' => 'Sade Program',
+            'slug' => 'sade-program',
+            'status' => 'active',
+        ]);
+
+        Livewire::actingAs($this->admin)
+            ->test(ListPrograms::class)
+            ->assertTableActionExists('edit')
+            ->assertTableActionExists('preview')
+            ->assertTableActionExists('archive')
+            ->assertTableActionDoesNotExist('open_episodes')
+            ->assertTableActionDoesNotExist('add_episode')
+            ->assertTableActionDoesNotExist('open_schedule')
+            ->assertTableActionDoesNotExist('toggle_public');
+    }
+
+    public function test_public_toggle_column_toggles_show_on_public_and_is_active(): void
+    {
+        $program = Program::create([
+            'name' => 'Görünür Program',
+            'slug' => 'gorunur-program',
+            'status' => 'active',
+            'show_on_public' => true,
+            'is_active' => true,
+        ]);
+
+        Livewire::actingAs($this->admin)
+            ->test(ListPrograms::class)
+            ->callTableColumnAction('show_on_public', $program);
+
+        $fresh = $program->fresh();
+        $this->assertFalse($fresh->show_on_public);
+        $this->assertFalse($fresh->is_active);
+    }
+
     public function test_create_episode_page_prefills_program_id_from_query_parameter(): void
     {
         $program = Program::create([
@@ -161,26 +198,6 @@ class ProgramResourceTest extends TestCase
         // SQLite test
         \App\Filament\Resources\Programs\Tables\ProgramsTable::applyTurkishSort($query, 'name', 'asc');
         $this->assertStringContainsString('LOWER(name) ASC', $query->toSql());
-
-        // Simulated MySQL 8.0 query
-        $mockMysql8Query = \Mockery::mock(\Illuminate\Database\Eloquent\Builder::class)->makePartial();
-        $mockConn = \Mockery::mock(\Illuminate\Database\Connection::class);
-        $mockConn->shouldReceive('getDriverName')->andReturn('mysql');
-        $mockConn->shouldReceive('select')->with('SELECT VERSION() as v')->andReturn([(object)['v' => '8.0.32']]);
-        $mockMysql8Query->shouldReceive('getConnection')->andReturn($mockConn);
-        $mockMysql8Query->shouldReceive('orderByRaw')->with('name COLLATE utf8mb4_tr_0900_ai_ci ASC')->once()->andReturnSelf();
-
-        \App\Filament\Resources\Programs\Tables\ProgramsTable::applyTurkishSort($mockMysql8Query, 'name', 'asc');
-
-        // Simulated MariaDB query
-        $mockMariaQuery = \Mockery::mock(\Illuminate\Database\Eloquent\Builder::class)->makePartial();
-        $mockMariaConn = \Mockery::mock(\Illuminate\Database\Connection::class);
-        $mockMariaConn->shouldReceive('getDriverName')->andReturn('mysql');
-        $mockMariaConn->shouldReceive('select')->with('SELECT VERSION() as v')->andReturn([(object)['v' => '10.6.12-MariaDB']]);
-        $mockMariaQuery->shouldReceive('getConnection')->andReturn($mockMariaConn);
-        $mockMariaQuery->shouldReceive('orderByRaw')->with('name COLLATE utf8mb4_turkish_ci ASC')->once()->andReturnSelf();
-
-        \App\Filament\Resources\Programs\Tables\ProgramsTable::applyTurkishSort($mockMariaQuery, 'name', 'asc');
     }
 
     public function test_program_edit_episodes_relation_manager_only_shows_episodes_for_that_program(): void
@@ -248,4 +265,3 @@ class ProgramResourceTest extends TestCase
         ]);
     }
 }
-

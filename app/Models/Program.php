@@ -56,6 +56,14 @@ class Program extends Model
                 $program->slug = Str::slug($program->name);
             }
 
+            if (blank($program->status)) {
+                $program->status = 'active';
+            }
+
+            if (is_null($program->show_on_public)) {
+                $program->show_on_public = true;
+            }
+
             // Sync is_active with status & show_on_public for backward compatibility
             if ($program->status === 'active' && $program->show_on_public) {
                 $program->is_active = true;

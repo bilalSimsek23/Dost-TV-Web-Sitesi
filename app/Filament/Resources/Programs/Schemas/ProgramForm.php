@@ -52,26 +52,9 @@ class ProgramForm
                                     ->columnSpanFull(),
 
                                 Grid::make(3)->schema([
-                                    Select::make('status')
-                                        ->label('Program Durumu')
-                                        ->options(Program::STATUSES)
-                                        ->default('active')
-                                        ->required(),
-
-                                    Toggle::make('show_on_public')
-                                        ->label('Public Sitede Göster')
-                                        ->default(true),
-
                                     Toggle::make('is_featured')
                                         ->label('Öne Çıkan Program')
                                         ->default(false),
-                                ]),
-
-                                Grid::make(3)->schema([
-                                    TextInput::make('sort_order')
-                                        ->label('Sıralama Önceliği')
-                                        ->numeric()
-                                        ->default(0),
 
                                     TextInput::make('trailer_url')
                                         ->label('Tanıtım Fragmanı (YouTube URL)')
