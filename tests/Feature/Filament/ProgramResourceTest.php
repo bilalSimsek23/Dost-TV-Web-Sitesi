@@ -57,6 +57,7 @@ class ProgramResourceTest extends TestCase
                 'slug' => 'yeni-program',
                 'short_description' => 'Kısa açıklama metni',
                 'description' => 'Detaylı açıklama metni',
+                'youtube_channel_url' => 'https://www.youtube.com/@dosttv',
                 'is_featured' => true,
                 'meta_title' => 'Yeni Program SEO Başlığı',
                 'meta_description' => 'Yeni Program SEO Açıklaması',
@@ -68,10 +69,34 @@ class ProgramResourceTest extends TestCase
             'status' => 'active',
             'show_on_public' => true,
             'is_active' => true,
+            'youtube_channel_url' => 'https://www.youtube.com/@dosttv',
             'meta_title' => 'Yeni Program SEO Başlığı',
             'meta_description' => 'Yeni Program SEO Açıklaması',
             'is_featured' => true,
         ]);
+    }
+
+    public function test_program_form_persists_channel_url_and_preserves_existing_playlist_url(): void
+    {
+        $program = Program::create([
+            'name' => 'Kanal URL Program',
+            'slug' => 'kanal-url-program',
+            'status' => 'active',
+            'youtube_playlist_url' => 'https://www.youtube.com/playlist?list=PLPRESERVE123',
+            'youtube_channel_url' => 'https://www.youtube.com/@eski',
+        ]);
+
+        Livewire::actingAs($this->admin)
+            ->test(EditProgram::class, ['record' => $program->slug])
+            ->fillForm([
+                'youtube_channel_url' => 'https://www.youtube.com/@yeni_kanal',
+            ])
+            ->call('save')
+            ->assertHasNoFormErrors();
+
+        $fresh = $program->fresh();
+        $this->assertEquals('https://www.youtube.com/@yeni_kanal', $fresh->youtube_channel_url);
+        $this->assertEquals('https://www.youtube.com/playlist?list=PLPRESERVE123', $fresh->youtube_playlist_url);
     }
 
     public function test_program_can_be_archived_and_unarchived_without_data_loss(): void

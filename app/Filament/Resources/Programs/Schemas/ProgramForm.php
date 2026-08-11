@@ -61,33 +61,11 @@ class ProgramForm
                                         ->placeholder('https://www.youtube.com/watch?v=...')
                                         ->url(),
 
-                                    TextInput::make('youtube_playlist_url')
-                                        ->label('YouTube Playlist URL')
-                                        ->placeholder('https://www.youtube.com/playlist?list=...')
+                                    TextInput::make('youtube_channel_url')
+                                        ->label('YouTube Kanal URL')
+                                        ->placeholder('https://www.youtube.com/@kanaladi')
                                         ->url()
-                                        ->rule(function () {
-                                            return function (string $attribute, $value, \Closure $fail) {
-                                                if (blank($value)) {
-                                                    return;
-                                                }
-
-                                                if (! str_contains($value, 'youtube.com') && ! str_contains($value, 'youtu.be')) {
-                                                    $fail('Lütfen geçerli bir YouTube playlist bağlantısı girin.');
-                                                    return;
-                                                }
-
-                                                if (preg_match('/(?:watch\?v=|youtu\.be\/|shorts\/)/i', $value) && ! str_contains($value, 'list=')) {
-                                                    $fail('Lütfen bir YouTube playlist bağlantısı girin. (Tekil video bağlantıları kabul edilmez)');
-                                                    return;
-                                                }
-
-                                                $playlistId = \App\Support\Youtube::extractPlaylistId($value);
-                                                if (! $playlistId) {
-                                                    $fail('Lütfen geçerli bir YouTube playlist bağlantısı girin.');
-                                                }
-                                            };
-                                        })
-                                        ->helperText('Otomatik bölüm senkronizasyonu için ana playlist bağlantısı'),
+                                        ->helperText('Programın resmi YouTube kanal bağlantısı (Bilgilendirme amaçlıdır)'),
                                 ]),
                             ]),
 

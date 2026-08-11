@@ -25,6 +25,7 @@ class Program extends Model
         'program_logo',
         'default_episode_image',
         'trailer_url',
+        'youtube_channel_url',
         'youtube_playlist_url',
         'last_youtube_sync_at',
         'is_active',
