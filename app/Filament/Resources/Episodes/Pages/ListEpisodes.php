@@ -140,6 +140,12 @@ class ListEpisodes extends ListRecords
         }
 
         return [
+            Action::make('youtube_import')
+                ->label('YouTube Playlist İçe Aktar')
+                ->icon('heroicon-o-arrow-down-tray')
+                ->color('danger')
+                ->url(fn (): string => static::getResource()::getUrl('youtube-import')),
+
             CreateAction::make()
                 ->label('Yeni Bölüm'),
         ];

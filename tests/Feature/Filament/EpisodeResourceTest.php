@@ -64,6 +64,7 @@ class EpisodeResourceTest extends TestCase
             ->assertSee('Sezon 1')
             ->assertSee('90 Bölüm')
             ->assertSee('Playlist Bağlı')
+            ->assertActionExists('youtube_import')
             ->assertActionExists('create');
     }
 

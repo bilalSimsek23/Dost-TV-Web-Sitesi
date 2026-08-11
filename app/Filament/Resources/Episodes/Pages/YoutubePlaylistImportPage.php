@@ -77,12 +77,22 @@ class YoutubePlaylistImportPage extends Page implements HasForms
                     ->searchable()
                     ->required()
                     ->live()
-                    ->afterStateUpdated(function ($state, $set) {
+                    ->afterStateUpdated(function ($state, $set, $get) {
                         $this->program_id = $state ? (int) $state : null;
                         $this->isPreviewLoaded = false;
                         $this->previewItems = [];
                         if ($this->program_id) {
-                            $maxEp = Episode::where('program_id', $this->program_id)->max('episode_number') ?? 0;
+                            $program = Program::find($this->program_id);
+                            if ($program && filled($program->youtube_playlist_url) && blank($get('playlist_url'))) {
+                                $set('playlist_url', $program->youtube_playlist_url);
+                                $this->playlist_url = $program->youtube_playlist_url;
+                            }
+                            $seasonNum = (int) ($get('season_number') ?? 1);
+                            $maxEp = Episode::where('program_id', $this->program_id)
+                                ->where('season_number', $seasonNum)
+                                ->max('episode_number')
+                                ?? Episode::where('program_id', $this->program_id)->max('episode_number')
+                                ?? 0;
                             $set('start_episode_number', $maxEp + 1);
                         } else {
                             $set('start_episode_number', 1);
@@ -98,12 +108,25 @@ class YoutubePlaylistImportPage extends Page implements HasForms
                 TextInput::make('season_number')
                     ->label('Sezon Numarası')
                     ->numeric()
-                    ->default(1),
+                    ->default(1)
+                    ->live()
+                    ->afterStateUpdated(function ($state, $set, $get) {
+                        $this->season_number = (int) ($state ?? 1);
+                        $pId = $get('program_id');
+                        if ($pId) {
+                            $maxEp = Episode::where('program_id', (int) $pId)
+                                ->where('season_number', $this->season_number)
+                                ->max('episode_number')
+                                ?? Episode::where('program_id', (int) $pId)->max('episode_number')
+                                ?? 0;
+                            $set('start_episode_number', $maxEp + 1);
+                        }
+                    }),
 
                 TextInput::make('start_episode_number')
                     ->label('Başlangıç Bölüm Numarası')
                     ->numeric()
-                    ->helperText('Varsayılan: Seçilen programın (Max Bölüm No + 1)'),
+                    ->helperText('Varsayılan: Seçilen program ve sezonun (Max Bölüm No + 1)'),
 
                 Checkbox::make('strip_program_name')
                     ->label('Program adını başlıktan kaldır')
