@@ -131,7 +131,7 @@ class ListEpisodes extends ListRecords
                 ->url($importUrl);
 
             $actions[] = Action::make('create_episode')
-                ->label('+ Yeni Bölüm')
+                ->label('Yeni Bölüm')
                 ->color('success')
                 ->icon('heroicon-o-plus')
                 ->url($createUrl);
@@ -141,7 +141,7 @@ class ListEpisodes extends ListRecords
 
         return [
             CreateAction::make()
-                ->label('+ Yeni Bölüm'),
+                ->label('Yeni Bölüm'),
         ];
     }
 }

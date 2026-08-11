@@ -173,22 +173,6 @@ class EpisodesTable
                     ->placeholder('-')
                     ->sortable(),
 
-                TextColumn::make('youtube_url')
-                    ->label('YouTube')
-                    ->formatStateUsing(function ($state, Episode $record) {
-                        $url = $record->canonical_url ?: $state;
-                        if (blank($url)) {
-                            return new HtmlString("<span class='text-gray-500 text-xs'>-</span>");
-                        }
-
-                        return new HtmlString("
-                            <a href='{$url}' target='_blank' class='inline-flex items-center gap-1.5 px-3 py-1.5 bg-red-600 hover:bg-red-500 text-white font-medium text-xs rounded-lg transition select-none shadow-sm'>
-                                <span>▶</span>
-                                <span>YouTube'da Aç ↗</span>
-                            </a>
-                        ");
-                    }),
-
                 TextColumn::make('status')
                     ->label('Durum')
                     ->badge()
