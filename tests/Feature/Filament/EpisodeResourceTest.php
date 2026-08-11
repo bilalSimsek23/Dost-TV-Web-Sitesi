@@ -180,8 +180,35 @@ class EpisodeResourceTest extends TestCase
             ->assertCanSeeTableRecords([$epS1])
             ->assertCanNotSeeTableRecords([$epS2])
             ->assertActionExists('back_to_main')
+            ->assertActionExists('sync_youtube_playlist')
             ->assertActionExists('youtube_import')
-            ->assertActionExists('create_episode');
+            ->assertActionExists('create_episode')
+            ->assertSee('Toplam Bölüm:')
+            ->assertSee('Playlist Bağlı');
+    }
+
+    public function test_season_detail_mode_sorts_episodes_in_natural_asc_order(): void
+    {
+        $ep2 = Episode::create([
+            'program_id' => $this->program->id,
+            'season_number' => 1,
+            'episode_number' => 2,
+            'title' => 'Bölüm 2',
+            'status' => 'published',
+        ]);
+
+        $ep1 = Episode::create([
+            'program_id' => $this->program->id,
+            'season_number' => 1,
+            'episode_number' => 1,
+            'title' => 'Bölüm 1',
+            'status' => 'published',
+        ]);
+
+        Livewire::actingAs($this->admin)
+            ->withQueryParams(['program_id' => $this->program->id, 'season_number' => 1])
+            ->test(ListEpisodes::class)
+            ->assertCanSeeTableRecords([$ep1, $ep2], inOrder: true);
     }
 
     public function test_season_detail_mode_can_archive_and_unarchive_episode(): void
