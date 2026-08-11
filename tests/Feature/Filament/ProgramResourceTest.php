@@ -217,6 +217,40 @@ class ProgramResourceTest extends TestCase
         $this->assertFalse($program->fresh()->is_featured);
     }
 
+    public function test_archive_category_and_management_archive_status_are_independent(): void
+    {
+        $archiveCategory = \App\Models\Category::create([
+            'name' => 'Arşiv',
+            'slug' => 'arsiv',
+            'is_active' => true,
+        ]);
+
+        $program = Program::create([
+            'name' => 'Bab-ı Reyyan',
+            'slug' => 'bab-i-reyyan',
+            'status' => 'active',
+            'is_active' => true,
+            'show_on_public' => true,
+        ]);
+        $program->categories()->attach($archiveCategory);
+
+        $this->assertEquals('active', $program->fresh()->status);
+        $this->assertTrue($program->fresh()->show_on_public);
+        $this->assertTrue($program->fresh()->is_active);
+
+        // Management archive action explicitly archives
+        Livewire::actingAs($this->admin)
+            ->test(ListPrograms::class)
+            ->callTableAction('archive', $program)
+            ->assertHasNoTableActionErrors();
+
+        $fresh = $program->fresh();
+        $this->assertEquals('archived', $fresh->status);
+        $this->assertFalse($fresh->show_on_public);
+        $this->assertEquals('Arşivlenmiş', Program::STATUSES[$fresh->status]);
+        $this->assertTrue($fresh->categories->contains($archiveCategory));
+    }
+
     public function test_create_episode_page_prefills_program_id_from_query_parameter(): void
     {
         $program = Program::create([

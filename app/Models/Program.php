@@ -46,7 +46,7 @@ class Program extends Model
         'active' => 'Aktif',
         'season_break' => 'Sezon Arasında',
         'completed' => 'Sona Erdi',
-        'archived' => 'Arşivlendi',
+        'archived' => 'Arşivlenmiş',
     ];
 
     protected static function booted(): void

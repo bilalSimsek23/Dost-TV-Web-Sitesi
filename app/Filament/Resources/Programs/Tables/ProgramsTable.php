@@ -48,7 +48,7 @@ class ProgramsTable
                     ->action(function (Program $record) {
                         if ($record->status === 'archived') {
                             Notification::make()
-                                ->title("Arşivlenmiş programı yayına almak için lütfen önce 'Arşivden Çıkar' işlemini yapın.")
+                                ->title("Arşivlenmiş programı yayına almak için lütfen önce 'Yönetim Arşivinden Çıkar' işlemini yapın.")
                                 ->warning()
                                 ->send();
                             return;
@@ -117,7 +117,7 @@ class ProgramsTable
                     ->openUrlInNewTab(),
 
                 Action::make('archive')
-                    ->label('Arşivle')
+                    ->label('Yönetim Arşivine Al')
                     ->icon('heroicon-o-archive-box')
                     ->color('warning')
                     ->visible(fn (Program $record) => $record->status !== 'archived')
@@ -129,13 +129,13 @@ class ProgramsTable
                             'is_active' => false,
                         ]);
                         Notification::make()
-                            ->title("{$record->name} arşive kaldırıldı.")
+                            ->title("{$record->name} yönetim arşivine alındı.")
                             ->warning()
                             ->send();
                     }),
 
                 Action::make('unarchive')
-                    ->label('Arşivden Çıkar')
+                    ->label('Yönetim Arşivinden Çıkar')
                     ->icon('heroicon-o-arrow-path')
                     ->color('success')
                     ->visible(fn (Program $record) => $record->status === 'archived')
@@ -146,7 +146,7 @@ class ProgramsTable
                             'is_active' => true,
                         ]);
                         Notification::make()
-                            ->title("{$record->name} tekrar aktif yapıldı.")
+                            ->title("{$record->name} yönetim arşivinden çıkarıldı.")
                             ->success()
                             ->send();
                     }),
