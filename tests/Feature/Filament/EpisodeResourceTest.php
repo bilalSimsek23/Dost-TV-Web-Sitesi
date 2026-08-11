@@ -180,11 +180,12 @@ class EpisodeResourceTest extends TestCase
             ->assertCanSeeTableRecords([$epS1])
             ->assertCanNotSeeTableRecords([$epS2])
             ->assertActionExists('back_to_main')
+            ->assertActionExists('open_playlist_url')
             ->assertActionExists('sync_youtube_playlist')
             ->assertActionExists('youtube_import')
             ->assertActionExists('create_episode')
-            ->assertSee('Toplam Bölüm:')
-            ->assertSee('Playlist Bağlı');
+            ->assertSee('1 Bölüm')
+            ->assertDontSee('Sezon ve Playlist Yönetim Paneli');
     }
 
     public function test_season_detail_mode_sorts_episodes_in_natural_asc_order(): void

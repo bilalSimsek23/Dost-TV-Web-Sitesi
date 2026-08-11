@@ -3,7 +3,6 @@
 namespace App\Filament\Resources\Episodes\Tables;
 
 use App\Models\Episode;
-use App\Models\Program;
 use App\Support\Youtube;
 use Filament\Actions\Action;
 use Filament\Actions\DeleteAction;
@@ -109,38 +108,6 @@ class EpisodesTable
     protected static function configureSeasonDetailTable(Table $table, int $programId, ?string $seasonParam): Table
     {
         return $table
-            ->header(function () use ($programId, $seasonParam) {
-                $program = Program::find($programId);
-                if (! $program) {
-                    return null;
-                }
-
-                $query = Episode::where('program_id', $programId);
-                if ($seasonParam === 'none' || blank($seasonParam)) {
-                    $query->whereNull('season_number');
-                } else {
-                    $query->where('season_number', (int) $seasonParam);
-                }
-                $episodesCount = $query->count();
-                $youtubeCount = (clone $query)->where(function ($q) {
-                    $q->where('video_source', 'youtube')->orWhere(function ($q2) {
-                        $q2->whereNotNull('youtube_url')->where('youtube_url', '!=', '');
-                    });
-                })->count();
-
-                $playlistStatus = filled($program->youtube_playlist_url)
-                    ? 'connected'
-                    : ($youtubeCount > 0 ? 'imported' : 'none');
-
-                return view('filament.resources.episodes.season-management-header', [
-                    'program' => $program,
-                    'seasonParam' => $seasonParam,
-                    'seasonLabel' => ($seasonParam === 'none' || blank($seasonParam)) ? 'Sezonsuz' : "Sezon {$seasonParam}",
-                    'episodesCount' => $episodesCount,
-                    'playlistStatus' => $playlistStatus,
-                    'lastSync' => $program->last_youtube_sync_at,
-                ]);
-            })
             ->recordUrl(fn (Episode $record) => url("/admin/episodes/{$record->id}/edit"))
             ->modifyQueryUsing(function ($query) use ($programId, $seasonParam) {
                 $query->where('program_id', $programId);

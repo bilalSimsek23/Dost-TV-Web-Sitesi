@@ -22,7 +22,7 @@ class ListEpisodes extends ListRecords
     #[Url]
     public ?string $season_number = null;
 
-    public function getSubheading(): ?string
+    public function getTitle(): string
     {
         $programId = $this->program_id ?? request()->query('program_id');
         $season = $this->season_number ?? request()->query('season_number');
@@ -32,6 +32,18 @@ class ListEpisodes extends ListRecords
             $programName = $program ? $program->name : 'Program';
             $seasonLabel = ($season === 'none' || blank($season)) ? 'Sezonsuz' : "Sezon {$season}";
 
+            return "{$programName} — {$seasonLabel}";
+        }
+
+        return 'Bölümler';
+    }
+
+    public function getSubheading(): ?string
+    {
+        $programId = $this->program_id ?? request()->query('program_id');
+        $season = $this->season_number ?? request()->query('season_number');
+
+        if (filled($programId)) {
             $query = Episode::where('program_id', $programId);
             if ($season === 'none' || blank($season)) {
                 $query->whereNull('season_number');
@@ -40,10 +52,10 @@ class ListEpisodes extends ListRecords
             }
             $count = $query->count();
 
-            return "{$programName} — {$seasonLabel} ({$count} Bölüm)";
+            return "{$count} Bölüm";
         }
 
-        return 'Program ve Sezon bazında gruplandırılmış bölüm listesi';
+        return null;
     }
 
     protected function getHeaderActions(): array
@@ -67,6 +79,13 @@ class ListEpisodes extends ListRecords
             ];
 
             if ($program && filled($program->youtube_playlist_url)) {
+                $actions[] = Action::make('open_playlist_url')
+                    ->label("YouTube Playlist'i Aç ↗")
+                    ->icon('heroicon-o-arrow-top-right-on-square')
+                    ->color('gray')
+                    ->url($program->youtube_playlist_url)
+                    ->openUrlInNewTab();
+
                 $actions[] = Action::make('sync_youtube_playlist')
                     ->label('YouTube ile Senkronize Et')
                     ->icon('heroicon-o-arrow-path')
