@@ -33,18 +33,6 @@ class ProgramsTable
                     ->color('primary')
                     ->separator(', '),
 
-                TextColumn::make('status')
-                    ->label('Durum')
-                    ->badge()
-                    ->formatStateUsing(fn ($state) => Program::STATUSES[$state] ?? $state)
-                    ->color(fn ($state) => match ($state) {
-                        'active' => 'success',
-                        'season_break' => 'warning',
-                        'completed' => 'gray',
-                        'archived' => 'danger',
-                        default => 'info',
-                    }),
-
                 TextColumn::make('episodes_count')
                     ->label('Bölüm Sayısı')
                     ->counts('episodes')
@@ -58,13 +46,29 @@ class ProgramsTable
                     ->formatStateUsing(fn ($state) => $state ? '👁 Yayında' : '⊘ Pasif')
                     ->color(fn ($state) => $state ? 'success' : 'gray')
                     ->action(function (Program $record) {
+                        if ($record->status === 'archived') {
+                            Notification::make()
+                                ->title("Arşivlenmiş programı yayına almak için lütfen önce 'Arşivden Çıkar' işlemini yapın.")
+                                ->warning()
+                                ->send();
+                            return;
+                        }
+
+                        if ($record->status === 'completed') {
+                            Notification::make()
+                                ->title("Sona ermiş programı yayına almak için durumunu aktif yapmalısınız.")
+                                ->warning()
+                                ->send();
+                            return;
+                        }
+
                         $newPublic = ! $record->show_on_public;
                         $record->update([
                             'show_on_public' => $newPublic,
-                            'is_active' => $newPublic,
+                            'is_active' => $newPublic && $record->status === 'active',
                         ]);
                         Notification::make()
-                            ->title("{$record->name} " . ($newPublic ? 'yayına alındı (Yayında).' : 'pasife alındı.'))
+                            ->title("{$record->name} " . ($newPublic ? 'yayına alındı (Yayında).' : 'pasife alındı (Pasif).'))
                             ->success()
                             ->send();
                     })

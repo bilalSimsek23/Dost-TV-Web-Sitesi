@@ -154,6 +154,7 @@ class ProgramResourceTest extends TestCase
             'is_active' => true,
         ]);
 
+        // Toggle to false
         Livewire::actingAs($this->admin)
             ->test(ListPrograms::class)
             ->callTableColumnAction('show_on_public', $program);
@@ -161,6 +162,35 @@ class ProgramResourceTest extends TestCase
         $fresh = $program->fresh();
         $this->assertFalse($fresh->show_on_public);
         $this->assertFalse($fresh->is_active);
+
+        // Toggle back to true
+        Livewire::actingAs($this->admin)
+            ->test(ListPrograms::class)
+            ->callTableColumnAction('show_on_public', $fresh);
+
+        $fresh2 = $program->fresh();
+        $this->assertTrue($fresh2->show_on_public);
+        $this->assertTrue($fresh2->is_active);
+    }
+
+    public function test_archived_program_cannot_be_made_public_directly_via_public_toggle(): void
+    {
+        $program = Program::create([
+            'name' => 'Arşivli Program',
+            'slug' => 'arsivli-program',
+            'status' => 'archived',
+            'show_on_public' => false,
+            'is_active' => false,
+        ]);
+
+        Livewire::actingAs($this->admin)
+            ->test(ListPrograms::class)
+            ->callTableColumnAction('show_on_public', $program);
+
+        $fresh = $program->fresh();
+        $this->assertFalse($fresh->show_on_public);
+        $this->assertFalse($fresh->is_active);
+        $this->assertEquals('archived', $fresh->status);
     }
 
     public function test_featured_toggle_column_toggles_is_featured_on_single_click(): void
