@@ -7,6 +7,7 @@ use App\Support\Youtube;
 use Filament\Actions\Action;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\EditAction;
+use Filament\Forms\Components\TextInput;
 use Filament\Notifications\Notification;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
@@ -110,6 +111,142 @@ class EpisodesTable
                     ->sortable(),
             ])
             ->actions([
+                Action::make('edit_season')
+                    ->label('Düzenle')
+                    ->icon('heroicon-o-pencil-square')
+                    ->color('primary')
+                    ->modalHeading('Sezon Bilgilerini Düzenle')
+                    ->modalDescription(function (Episode $record) {
+                        $count = $record->episodes_count ?? 1;
+                        return "Bu işlem bu gruptaki {$count} bölümün Sezon Numarası ve Sezon Yılı bilgisini topluca güncelleyecektir.";
+                    })
+                    ->modalSubmitActionLabel('Kaydet ve Güncelle')
+                    ->form([
+                        TextInput::make('program_name')
+                            ->label('Program')
+                            ->disabled()
+                            ->dehydrated(false)
+                            ->default(fn (Episode $record) => $record->program?->name),
+
+                        TextInput::make('season_number')
+                            ->label('Sezon Numarası')
+                            ->numeric()
+                            ->nullable()
+                            ->default(fn (Episode $record) => $record->season_number)
+                            ->placeholder('Örn: 1'),
+
+                        TextInput::make('season_year')
+                            ->label('Sezon Yılı')
+                            ->numeric()
+                            ->minValue(1900)
+                            ->maxValue(2100)
+                            ->nullable()
+                            ->default(fn (Episode $record) => $record->season_year)
+                            ->placeholder('Örn: 2017')
+                            ->helperText('Opsiyonel (Örn: 2017)'),
+                    ])
+                    ->fillForm(fn (Episode $record): array => [
+                        'program_name' => $record->program?->name,
+                        'season_number' => $record->season_number,
+                        'season_year' => $record->season_year,
+                    ])
+                    ->action(function (Episode $record, array $data) {
+                        $oldProgramId = (int) $record->program_id;
+                        $oldSeasonNumber = $record->season_number !== null ? (int) $record->season_number : null;
+                        $oldSeasonYear = $record->season_year !== null ? (int) $record->season_year : null;
+
+                        $newSeasonNumber = filled($data['season_number']) ? (int) $data['season_number'] : null;
+                        $newSeasonYear = filled($data['season_year']) ? (int) $data['season_year'] : null;
+
+                        // If no changes, return early
+                        if ($oldSeasonNumber === $newSeasonNumber && $oldSeasonYear === $newSeasonYear) {
+                            Notification::make()
+                                ->title('Herhangi bir değişiklik yapılmadı.')
+                                ->info()
+                                ->send();
+
+                            return;
+                        }
+
+                        // Conflict check: Does another season exist for this program with the new values?
+                        $conflictQuery = Episode::where('program_id', $oldProgramId);
+                        if ($newSeasonNumber !== null) {
+                            $conflictQuery->where('season_number', $newSeasonNumber);
+                        } else {
+                            $conflictQuery->whereNull('season_number');
+                        }
+
+                        if ($newSeasonYear !== null) {
+                            $conflictQuery->where('season_year', $newSeasonYear);
+                        } else {
+                            $conflictQuery->whereNull('season_year');
+                        }
+
+                        // Exclude current group's episodes
+                        $excludeQuery = Episode::where('program_id', $oldProgramId);
+                        if ($oldSeasonNumber !== null) {
+                            $excludeQuery->where('season_number', $oldSeasonNumber);
+                        } else {
+                            $excludeQuery->whereNull('season_number');
+                        }
+
+                        if ($oldSeasonYear !== null) {
+                            $excludeQuery->where('season_year', $oldSeasonYear);
+                        } else {
+                            $excludeQuery->whereNull('season_year');
+                        }
+
+                        $hasConflict = $conflictQuery->whereNotIn('id', $excludeQuery->select('id'))->exists();
+
+                        if ($hasConflict) {
+                            $targetLabel = ($newSeasonNumber !== null ? "Sezon {$newSeasonNumber}" : "Sezonsuz")
+                                . ($newSeasonYear !== null ? " ({$newSeasonYear})" : "");
+
+                            Notification::make()
+                                ->title("Bu programda {$targetLabel} zaten mevcut.")
+                                ->danger()
+                                ->send();
+
+                            return;
+                        }
+
+                        // Execute bulk update in transaction
+                        $updatedCount = 0;
+                        try {
+                            DB::transaction(function () use ($oldProgramId, $oldSeasonNumber, $oldSeasonYear, $newSeasonNumber, $newSeasonYear, &$updatedCount) {
+                                $query = Episode::where('program_id', $oldProgramId);
+                                if ($oldSeasonNumber !== null) {
+                                    $query->where('season_number', $oldSeasonNumber);
+                                } else {
+                                    $query->whereNull('season_number');
+                                }
+
+                                if ($oldSeasonYear !== null) {
+                                    $query->where('season_year', $oldSeasonYear);
+                                } else {
+                                    $query->whereNull('season_year');
+                                }
+
+                                $updatedCount = $query->count();
+
+                                $query->update([
+                                    'season_number' => $newSeasonNumber,
+                                    'season_year' => $newSeasonYear,
+                                ]);
+                            });
+
+                            Notification::make()
+                                ->title("{$updatedCount} bölümün sezon bilgisi başarıyla güncellendi.")
+                                ->success()
+                                ->send();
+                        } catch (\Throwable $e) {
+                            Notification::make()
+                                ->title("Sezon güncellenirken bir hata oluştu: {$e->getMessage()}")
+                                ->danger()
+                                ->send();
+                        }
+                    }),
+
                 Action::make('manage')
                     ->label('Yönet')
                     ->icon('heroicon-o-folder-open')

@@ -138,6 +138,88 @@ class EpisodeResourceTest extends TestCase
             ->assertSet('data.season_year', 2026);
     }
 
+    public function test_edit_season_action_bulk_updates_season_number_and_year(): void
+    {
+        $prog = Program::create([
+            'name' => 'Toplu Güncelleme Programı',
+            'slug' => 'toplu-guncelleme-programi',
+            'status' => 'active',
+        ]);
+
+        $episodes = [];
+        for ($i = 1; $i <= 5; $i++) {
+            $episodes[] = Episode::create([
+                'program_id' => $prog->id,
+                'season_number' => 1,
+                'season_year' => null,
+                'episode_number' => $i,
+                'title' => "Bölüm {$i}",
+                'youtube_url' => "https://youtube.com/watch?v=TEST_{$i}",
+                'status' => 'published',
+            ]);
+        }
+
+        $representativeRecord = Episode::where('program_id', $prog->id)->where('season_number', 1)->first();
+
+        Livewire::actingAs($this->admin)
+            ->test(ListEpisodes::class)
+            ->callTableAction('edit_season', $representativeRecord, [
+                'season_number' => 2,
+                'season_year' => 2017,
+            ])
+            ->assertHasNoTableActionErrors();
+
+        // Verify all 5 episodes are updated
+        $updatedEpisodes = Episode::where('program_id', $prog->id)->get();
+        $this->assertCount(5, $updatedEpisodes);
+        foreach ($updatedEpisodes as $ep) {
+            $this->assertEquals(2, $ep->season_number);
+            $this->assertEquals(2017, $ep->season_year);
+            $this->assertStringStartsWith('Bölüm ', $ep->title);
+            $this->assertStringStartsWith('https://youtube.com/watch?v=TEST_', $ep->youtube_url);
+            $this->assertEquals($prog->id, $ep->program_id);
+        }
+    }
+
+    public function test_edit_season_action_prevents_conflict_with_existing_season(): void
+    {
+        $prog = Program::create([
+            'name' => 'Çakışma Test Programı',
+            'slug' => 'caxisma-test-programi',
+            'status' => 'active',
+        ]);
+
+        $epGroup1 = Episode::create([
+            'program_id' => $prog->id,
+            'season_number' => 1,
+            'season_year' => 2017,
+            'episode_number' => 1,
+            'title' => 'Grup 1 Bölüm 1',
+            'status' => 'published',
+        ]);
+
+        $epGroup2 = Episode::create([
+            'program_id' => $prog->id,
+            'season_number' => 2,
+            'season_year' => 2025,
+            'episode_number' => 1,
+            'title' => 'Grup 2 Bölüm 1',
+            'status' => 'published',
+        ]);
+
+        // Attempt to rename Group 1 to match Group 2 (Season 2, 2025)
+        Livewire::actingAs($this->admin)
+            ->test(ListEpisodes::class)
+            ->callTableAction('edit_season', $epGroup1, [
+                'season_number' => 2,
+                'season_year' => 2025,
+            ]);
+
+        // Verify Group 1 was NOT merged or modified
+        $this->assertEquals(1, $epGroup1->fresh()->season_number);
+        $this->assertEquals(2017, $epGroup1->fresh()->season_year);
+    }
+
     public function test_different_seasons_and_programs_display_as_separate_grouped_rows(): void
     {
         $progB = Program::create([
