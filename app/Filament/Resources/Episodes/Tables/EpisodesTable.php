@@ -22,9 +22,10 @@ class EpisodesTable
         $livewire = $table->getLivewire();
         $programId = $livewire?->program_id ?? request()->query('program_id');
         $seasonParam = $livewire?->season_number ?? request()->query('season_number');
+        $seasonYearParam = $livewire?->season_year ?? request()->query('season_year');
 
         if (filled($programId)) {
-            return static::configureSeasonDetailTable($table, (int) $programId, $seasonParam);
+            return static::configureSeasonDetailTable($table, (int) $programId, $seasonParam, $seasonYearParam);
         }
 
         return static::configureGroupedMainTable($table);
@@ -33,18 +34,25 @@ class EpisodesTable
     protected static function configureGroupedMainTable(Table $table): Table
     {
         return $table
-            ->recordUrl(fn (Episode $record) => url('/admin/episodes?program_id=' . $record->program_id . '&season_number=' . ($record->season_number ?? 'none')))
+            ->recordUrl(function (Episode $record) {
+                $url = '/admin/episodes?program_id=' . $record->program_id . '&season_number=' . ($record->season_number ?? 'none');
+                if (filled($record->season_year)) {
+                    $url .= '&season_year=' . $record->season_year;
+                }
+                return url($url);
+            })
             ->modifyQueryUsing(function ($query) {
                 return $query
                     ->select(
                         'program_id',
                         'season_number',
+                        'season_year',
                         DB::raw('COUNT(id) as episodes_count'),
                         DB::raw('COUNT(CASE WHEN video_source = "youtube" OR (youtube_url IS NOT NULL AND youtube_url != "") THEN 1 END) as youtube_episodes_count'),
                         DB::raw('MAX(aired_at) as last_aired_at'),
                         DB::raw('MIN(id) as id')
                     )
-                    ->groupBy('program_id', 'season_number')
+                    ->groupBy('program_id', 'season_number', 'season_year')
                     ->with('program');
             })
             ->columns([
@@ -54,12 +62,19 @@ class EpisodesTable
                     ->sortable()
                     ->weight('bold'),
 
-                TextColumn::make('season_number')
+                TextColumn::make('season_display')
                     ->label('Sezon')
-                    ->formatStateUsing(fn ($state) => filled($state) ? "Sezon {$state}" : 'Sezonsuz')
+                    ->state(function (Episode $record) {
+                        if (blank($record->season_number)) {
+                            return filled($record->season_year) ? "Sezonsuz ({$record->season_year})" : 'Sezonsuz';
+                        }
+
+                        return filled($record->season_year)
+                            ? "Sezon {$record->season_number} ({$record->season_year})"
+                            : "Sezon {$record->season_number}";
+                    })
                     ->badge()
-                    ->color(fn ($state) => filled($state) ? 'primary' : 'gray')
-                    ->sortable(),
+                    ->color(fn (Episode $record) => filled($record->season_number) ? 'primary' : 'gray'),
 
                 TextColumn::make('episodes_count')
                     ->label('Bölüm Sayısı')
@@ -99,23 +114,35 @@ class EpisodesTable
                     ->label('Yönet')
                     ->icon('heroicon-o-folder-open')
                     ->color('amber')
-                    ->url(fn (Episode $record) => url('/admin/episodes?program_id=' . $record->program_id . '&season_number=' . ($record->season_number ?? 'none'))),
+                    ->url(function (Episode $record) {
+                        $url = '/admin/episodes?program_id=' . $record->program_id . '&season_number=' . ($record->season_number ?? 'none');
+                        if (filled($record->season_year)) {
+                            $url .= '&season_year=' . $record->season_year;
+                        }
+                        return url($url);
+                    }),
             ])
             ->paginated([25, 50, 100])
             ->defaultPaginationPageOption(25);
     }
 
-    protected static function configureSeasonDetailTable(Table $table, int $programId, ?string $seasonParam): Table
+    protected static function configureSeasonDetailTable(Table $table, int $programId, ?string $seasonParam, ?string $seasonYearParam = null): Table
     {
         return $table
             ->recordUrl(fn (Episode $record) => url("/admin/episodes/{$record->id}/edit"))
-            ->modifyQueryUsing(function ($query) use ($programId, $seasonParam) {
+            ->modifyQueryUsing(function ($query) use ($programId, $seasonParam, $seasonYearParam) {
                 $query->where('program_id', $programId);
 
                 if ($seasonParam === 'none' || blank($seasonParam)) {
                     $query->whereNull('season_number');
                 } else {
                     $query->where('season_number', (int) $seasonParam);
+                }
+
+                if (filled($seasonYearParam) && $seasonYearParam !== 'none') {
+                    $query->where('season_year', (int) $seasonYearParam);
+                } elseif ($seasonYearParam === 'none') {
+                    $query->whereNull('season_year');
                 }
 
                 return $query

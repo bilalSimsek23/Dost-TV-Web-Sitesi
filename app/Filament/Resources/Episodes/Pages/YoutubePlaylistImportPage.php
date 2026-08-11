@@ -38,6 +38,8 @@ class YoutubePlaylistImportPage extends Page implements HasForms
 
     public int $season_number = 1;
 
+    public ?int $season_year = null;
+
     public ?int $start_episode_number = 1;
 
     public bool $strip_program_name = false;
@@ -87,13 +89,7 @@ class YoutubePlaylistImportPage extends Page implements HasForms
                                 $set('playlist_url', $program->youtube_playlist_url);
                                 $this->playlist_url = $program->youtube_playlist_url;
                             }
-                            $seasonNum = (int) ($get('season_number') ?? 1);
-                            $maxEp = Episode::where('program_id', $this->program_id)
-                                ->where('season_number', $seasonNum)
-                                ->max('episode_number')
-                                ?? Episode::where('program_id', $this->program_id)->max('episode_number')
-                                ?? 0;
-                            $set('start_episode_number', $maxEp + 1);
+                            $this->calculateStartEpisodeNumber($get, $set);
                         } else {
                             $set('start_episode_number', 1);
                         }
@@ -112,15 +108,20 @@ class YoutubePlaylistImportPage extends Page implements HasForms
                     ->live()
                     ->afterStateUpdated(function ($state, $set, $get) {
                         $this->season_number = (int) ($state ?? 1);
-                        $pId = $get('program_id');
-                        if ($pId) {
-                            $maxEp = Episode::where('program_id', (int) $pId)
-                                ->where('season_number', $this->season_number)
-                                ->max('episode_number')
-                                ?? Episode::where('program_id', (int) $pId)->max('episode_number')
-                                ?? 0;
-                            $set('start_episode_number', $maxEp + 1);
-                        }
+                        $this->calculateStartEpisodeNumber($get, $set);
+                    }),
+
+                TextInput::make('season_year')
+                    ->label('Sezon Yılı')
+                    ->numeric()
+                    ->minValue(1900)
+                    ->maxValue(2100)
+                    ->placeholder('Örn: 2017')
+                    ->helperText('Opsiyonel (Örn: 2017)')
+                    ->live()
+                    ->afterStateUpdated(function ($state, $set, $get) {
+                        $this->season_year = $state ? (int) $state : null;
+                        $this->calculateStartEpisodeNumber($get, $set);
                     }),
 
                 TextInput::make('start_episode_number')
@@ -136,6 +137,26 @@ class YoutubePlaylistImportPage extends Page implements HasForms
             ->statePath('data');
     }
 
+    public function calculateStartEpisodeNumber($get, $set): void
+    {
+        $pId = $get('program_id');
+        $sNum = (int) ($get('season_number') ?? 1);
+        $sYear = $get('season_year') ? (int) $get('season_year') : null;
+
+        if ($pId) {
+            $query = Episode::where('program_id', (int) $pId)->where('season_number', $sNum);
+            if ($sYear) {
+                $query->where('season_year', $sYear);
+            }
+            $maxEp = $query->max('episode_number')
+                ?? Episode::where('program_id', (int) $pId)->max('episode_number')
+                ?? 0;
+            $set('start_episode_number', $maxEp + 1);
+        } else {
+            $set('start_episode_number', 1);
+        }
+    }
+
     public function mount(): void
     {
         $requestedProgramId = request()->query('program_id');
@@ -149,22 +170,28 @@ class YoutubePlaylistImportPage extends Page implements HasForms
             $requestedSeason = request()->query('season_number');
             if (filled($requestedSeason) && $requestedSeason !== 'none') {
                 $this->season_number = (int) $requestedSeason;
-                $maxEp = Episode::where('program_id', $this->program_id)
-                    ->where('season_number', $this->season_number)
-                    ->max('episode_number')
-                    ?? Episode::where('program_id', $this->program_id)->max('episode_number')
-                    ?? 0;
-                $this->start_episode_number = $maxEp + 1;
-            } else {
-                $maxEp = Episode::where('program_id', $this->program_id)->max('episode_number') ?? 0;
-                $this->start_episode_number = $maxEp + 1;
             }
+
+            $requestedYear = request()->query('season_year');
+            if (filled($requestedYear) && $requestedYear !== 'none') {
+                $this->season_year = (int) $requestedYear;
+            }
+
+            $query = Episode::where('program_id', $this->program_id)->where('season_number', $this->season_number);
+            if ($this->season_year) {
+                $query->where('season_year', $this->season_year);
+            }
+            $maxEp = $query->max('episode_number')
+                ?? Episode::where('program_id', $this->program_id)->max('episode_number')
+                ?? 0;
+            $this->start_episode_number = $maxEp + 1;
         }
 
         $this->form->fill([
             'program_id' => $this->program_id,
             'playlist_url' => $this->playlist_url,
             'season_number' => $this->season_number,
+            'season_year' => $this->season_year,
             'start_episode_number' => $this->start_episode_number ?? 1,
             'strip_program_name' => $this->strip_program_name,
         ]);
@@ -350,6 +377,7 @@ class YoutubePlaylistImportPage extends Page implements HasForms
                         'program_id' => $this->program_id,
                         'episode_number' => $currentEpNumber++,
                         'season_number' => $this->season_number,
+                        'season_year' => $this->season_year,
                         'title' => $item['processed_title'],
                         'description' => $item['description'],
                         'thumbnail' => $item['thumbnail_url'],

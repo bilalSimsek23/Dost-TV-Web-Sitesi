@@ -34,11 +34,19 @@ class EpisodeForm
                                     ->preload()
                                     ->required(),
 
-                                Grid::make(2)->schema([
+                                Grid::make(3)->schema([
                                     TextInput::make('season_number')
                                         ->label('Sezon Numarası')
                                         ->numeric()
                                         ->placeholder('Örn: 1'),
+
+                                    TextInput::make('season_year')
+                                        ->label('Sezon Yılı')
+                                        ->numeric()
+                                        ->minValue(1900)
+                                        ->maxValue(2100)
+                                        ->placeholder('Örn: 2017')
+                                        ->helperText('Opsiyonel'),
 
                                     TextInput::make('episode_number')
                                         ->label('Bölüm Numarası')

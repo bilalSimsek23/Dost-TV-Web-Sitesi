@@ -362,18 +362,57 @@ class YoutubePlaylistImportTest extends TestCase
         Episode::create([
             'program_id' => $this->program->id,
             'season_number' => 2,
+            'season_year' => 2025,
             'episode_number' => 5,
             'title' => 'S2 B5',
             'status' => 'published',
         ]);
 
         Livewire::actingAs($this->admin)
-            ->withQueryParams(['program_id' => $this->program->id, 'season_number' => 2])
+            ->withQueryParams(['program_id' => $this->program->id, 'season_number' => 2, 'season_year' => 2025])
             ->test(YoutubePlaylistImportPage::class)
             ->assertSet('program_id', $this->program->id)
             ->assertSet('playlist_url', 'https://www.youtube.com/playlist?list=PLPROG123')
             ->assertSet('season_number', 2)
+            ->assertSet('season_year', 2025)
             ->assertSet('start_episode_number', 6);
+    }
+
+    public function test_import_with_season_year_persists_season_year_to_episodes(): void
+    {
+        Http::fake([
+            'https://www.googleapis.com/youtube/v3/playlistItems*' => Http::response([
+                'items' => [
+                    [
+                        'snippet' => [
+                            'title' => 'Özel Yıl Bölümü',
+                            'description' => 'Yıllık Açıklama',
+                            'position' => 0,
+                            'publishedAt' => '2017-05-01T12:00:00Z',
+                            'resourceId' => ['videoId' => 'YEAR_VID_123'],
+                            'thumbnails' => ['high' => ['url' => 'https://img.youtube.com/vi/YEAR_VID_123/hqdefault.jpg']],
+                        ],
+                    ],
+                ],
+            ], 200),
+        ]);
+
+        Livewire::actingAs($this->admin)
+            ->test(YoutubePlaylistImportPage::class)
+            ->set('data.program_id', $this->program->id)
+            ->set('data.playlist_url', 'https://www.youtube.com/playlist?list=PL_YEAR_123')
+            ->set('data.season_number', 1)
+            ->set('data.season_year', 2017)
+            ->call('fetchPreview')
+            ->call('importEpisodes')
+            ->assertSet('isImported', true);
+
+        $this->assertDatabaseHas('episodes', [
+            'program_id' => $this->program->id,
+            'season_number' => 1,
+            'season_year' => 2017,
+            'title' => 'Özel Yıl Bölümü',
+        ]);
     }
 }
 

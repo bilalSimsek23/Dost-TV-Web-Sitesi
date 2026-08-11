@@ -56,8 +56,8 @@ class EpisodeResourceTest extends TestCase
             ->test(ListEpisodes::class)
             ->assertCanSeeTableRecords(
                 Episode::query()
-                    ->select('program_id', 'season_number', \Illuminate\Support\Facades\DB::raw('COUNT(id) as episodes_count'), \Illuminate\Support\Facades\DB::raw('MIN(id) as id'))
-                    ->groupBy('program_id', 'season_number')
+                    ->select('program_id', 'season_number', 'season_year', \Illuminate\Support\Facades\DB::raw('COUNT(id) as episodes_count'), \Illuminate\Support\Facades\DB::raw('MIN(id) as id'))
+                    ->groupBy('program_id', 'season_number', 'season_year')
                     ->get()
             )
             ->assertSee('Söze Yar Olmak')
@@ -66,6 +66,76 @@ class EpisodeResourceTest extends TestCase
             ->assertSee('Playlist Bağlı')
             ->assertActionExists('youtube_import')
             ->assertActionExists('create');
+    }
+
+    public function test_episodes_with_season_year_display_formatted_label_and_group_separately(): void
+    {
+        $prog = Program::create([
+            'name' => 'Hikmet Arayışları',
+            'slug' => 'hikmet-arayislari',
+            'status' => 'active',
+        ]);
+
+        Episode::create([
+            'program_id' => $prog->id,
+            'season_number' => 1,
+            'season_year' => 2017,
+            'episode_number' => 1,
+            'title' => '2017 Bölüm 1',
+            'status' => 'published',
+        ]);
+
+        Episode::create([
+            'program_id' => $prog->id,
+            'season_number' => 1,
+            'season_year' => 2025,
+            'episode_number' => 1,
+            'title' => '2025 Bölüm 1',
+            'status' => 'published',
+        ]);
+
+        Episode::create([
+            'program_id' => $prog->id,
+            'season_number' => 1,
+            'season_year' => null,
+            'episode_number' => 1,
+            'title' => 'Yılsız Bölüm 1',
+            'status' => 'published',
+        ]);
+
+        Livewire::actingAs($this->admin)
+            ->test(ListEpisodes::class)
+            ->assertSee('Sezon 1 (2017)')
+            ->assertSee('Sezon 1 (2025)')
+            ->assertSee('Sezon 1');
+
+        // Test Season Detail title with year
+        Livewire::actingAs($this->admin)
+            ->withQueryParams(['program_id' => $prog->id, 'season_number' => 1, 'season_year' => 2017])
+            ->test(ListEpisodes::class)
+            ->assertSee('Hikmet Arayışları — Sezon 1 (2017)');
+
+        // Test Season Detail title without year
+        Livewire::actingAs($this->admin)
+            ->withQueryParams(['program_id' => $prog->id, 'season_number' => 1])
+            ->test(ListEpisodes::class)
+            ->assertSee('Hikmet Arayışları — Sezon 1');
+    }
+
+    public function test_create_episode_prefills_season_year_from_query_params(): void
+    {
+        $prog = Program::create([
+            'name' => 'Yıllık Program',
+            'slug' => 'yillik-program',
+            'status' => 'active',
+        ]);
+
+        Livewire::actingAs($this->admin)
+            ->withQueryParams(['program_id' => $prog->id, 'season_number' => 2, 'season_year' => 2026])
+            ->test(CreateEpisode::class)
+            ->assertSet('data.program_id', (string) $prog->id)
+            ->assertSet('data.season_number', 2)
+            ->assertSet('data.season_year', 2026);
     }
 
     public function test_different_seasons_and_programs_display_as_separate_grouped_rows(): void

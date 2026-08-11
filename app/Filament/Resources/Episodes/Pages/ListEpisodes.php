@@ -22,15 +22,22 @@ class ListEpisodes extends ListRecords
     #[Url]
     public ?string $season_number = null;
 
+    #[Url]
+    public ?string $season_year = null;
+
     public function getTitle(): string
     {
         $programId = $this->program_id ?? request()->query('program_id');
         $season = $this->season_number ?? request()->query('season_number');
+        $year = $this->season_year ?? request()->query('season_year');
 
         if (filled($programId)) {
             $program = Program::find($programId);
             $programName = $program ? $program->name : 'Program';
             $seasonLabel = ($season === 'none' || blank($season)) ? 'Sezonsuz' : "Sezon {$season}";
+            if (filled($year) && $year !== 'none') {
+                $seasonLabel .= " ({$year})";
+            }
 
             return "{$programName} — {$seasonLabel}";
         }
@@ -42,6 +49,7 @@ class ListEpisodes extends ListRecords
     {
         $programId = $this->program_id ?? request()->query('program_id');
         $season = $this->season_number ?? request()->query('season_number');
+        $year = $this->season_year ?? request()->query('season_year');
 
         if (filled($programId)) {
             $query = Episode::where('program_id', $programId);
@@ -50,6 +58,13 @@ class ListEpisodes extends ListRecords
             } else {
                 $query->where('season_number', $season);
             }
+
+            if (filled($year) && $year !== 'none') {
+                $query->where('season_year', (int) $year);
+            } elseif ($year === 'none') {
+                $query->whereNull('season_year');
+            }
+
             $count = $query->count();
 
             return "{$count} Bölüm";
@@ -62,14 +77,23 @@ class ListEpisodes extends ListRecords
     {
         $programId = $this->program_id ?? request()->query('program_id');
         $season = $this->season_number ?? request()->query('season_number');
+        $year = $this->season_year ?? request()->query('season_year');
 
         if (filled($programId)) {
             $program = Program::find($programId);
             $seasonValue = (filled($season) && $season !== 'none') ? $season : '';
-            $createUrl = static::getResource()::getUrl('create') . "?program_id={$programId}"
-                . (filled($seasonValue) ? "&season_number={$seasonValue}" : '');
-            $importUrl = static::getResource()::getUrl('youtube-import') . "?program_id={$programId}"
-                . (filled($seasonValue) ? "&season_number={$seasonValue}" : '');
+            $yearValue = (filled($year) && $year !== 'none') ? $year : '';
+
+            $params = "?program_id={$programId}";
+            if (filled($seasonValue)) {
+                $params .= "&season_number={$seasonValue}";
+            }
+            if (filled($yearValue)) {
+                $params .= "&season_year={$yearValue}";
+            }
+
+            $createUrl = static::getResource()::getUrl('create') . $params;
+            $importUrl = static::getResource()::getUrl('youtube-import') . $params;
 
             $actions = [
                 Action::make('back_to_main')

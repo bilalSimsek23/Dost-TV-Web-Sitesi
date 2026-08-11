@@ -16,6 +16,7 @@ class Episode extends Model
         'program_id',
         'episode_number',
         'season_number',
+        'season_year',
         'title',
         'slug',
         'description',
@@ -48,6 +49,7 @@ class Episode extends Model
         'show_on_public' => 'boolean',
         'episode_number' => 'integer',
         'season_number' => 'integer',
+        'season_year' => 'integer',
     ];
 
     public const STATUSES = [
