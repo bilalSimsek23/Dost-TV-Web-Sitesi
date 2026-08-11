@@ -97,6 +97,7 @@ class EpisodeResourceTest extends TestCase
             'season_number' => 1,
             'episode_number' => 1,
             'title' => 'Akla Kapı S1',
+            'video_source' => 'upload',
             'status' => 'published',
         ]);
 
@@ -106,7 +107,53 @@ class EpisodeResourceTest extends TestCase
             ->assertSee('Sezon 1')
             ->assertSee('Sezon 2')
             ->assertSee('Akla Kapı')
-            ->assertSee('Playlist Yok'); // progB has no playlist url
+            ->assertSee('Playlist Yok'); // progB has no playlist url and video_source upload
+    }
+
+    public function test_playlist_badge_states_differentiate_connected_imported_and_none(): void
+    {
+        // 1. Connected
+        $progConnected = Program::create([
+            'name' => 'Bağlı Program',
+            'slug' => 'bagli-program',
+            'youtube_playlist_url' => 'https://youtube.com/playlist?list=PLCONNECTED',
+        ]);
+        Episode::create(['program_id' => $progConnected->id, 'season_number' => 1, 'title' => 'Ep 1', 'status' => 'published']);
+
+        // 2. Imported from playlist (no url in program, but youtube episode)
+        $progImported = Program::create([
+            'name' => 'Aktarılmış Program',
+            'slug' => 'aktarilmis-program',
+            'youtube_playlist_url' => null,
+        ]);
+        Episode::create([
+            'program_id' => $progImported->id,
+            'season_number' => 1,
+            'title' => 'Ep 2',
+            'video_source' => 'youtube',
+            'youtube_url' => 'https://youtube.com/watch?v=TEST1234',
+            'status' => 'published',
+        ]);
+
+        // 3. No playlist
+        $progNone = Program::create([
+            'name' => 'Playlist Olmayan Program',
+            'slug' => 'playlist-olmayan-program',
+            'youtube_playlist_url' => null,
+        ]);
+        Episode::create([
+            'program_id' => $progNone->id,
+            'season_number' => 1,
+            'title' => 'Ep 3',
+            'video_source' => 'upload',
+            'status' => 'published',
+        ]);
+
+        Livewire::actingAs($this->admin)
+            ->test(ListEpisodes::class)
+            ->assertSee('Playlist Bağlı')
+            ->assertSee('Playlistten Aktarıldı')
+            ->assertSee('Playlist Yok');
     }
 
     public function test_season_detail_mode_filters_episodes_and_shows_contextual_actions(): void

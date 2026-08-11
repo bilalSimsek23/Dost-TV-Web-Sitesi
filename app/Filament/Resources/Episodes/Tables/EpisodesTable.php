@@ -39,6 +39,7 @@ class EpisodesTable
                         'program_id',
                         'season_number',
                         DB::raw('COUNT(id) as episodes_count'),
+                        DB::raw('COUNT(CASE WHEN video_source = "youtube" OR (youtube_url IS NOT NULL AND youtube_url != "") THEN 1 END) as youtube_episodes_count'),
                         DB::raw('MAX(aired_at) as last_aired_at'),
                         DB::raw('MIN(id) as id')
                     )
@@ -67,8 +68,24 @@ class EpisodesTable
                 TextColumn::make('playlist')
                     ->label('Playlist')
                     ->badge()
-                    ->state(fn (Episode $record) => filled($record->program?->youtube_playlist_url) ? 'Playlist Bağlı' : 'Playlist Yok')
-                    ->color(fn (Episode $record) => filled($record->program?->youtube_playlist_url) ? 'success' : 'gray'),
+                    ->state(function (Episode $record) {
+                        if (filled($record->program?->youtube_playlist_url)) {
+                            return 'Playlist Bağlı';
+                        }
+                        if (($record->youtube_episodes_count ?? 0) > 0) {
+                            return 'Playlistten Aktarıldı';
+                        }
+                        return 'Playlist Yok';
+                    })
+                    ->color(function (Episode $record) {
+                        if (filled($record->program?->youtube_playlist_url)) {
+                            return 'success';
+                        }
+                        if (($record->youtube_episodes_count ?? 0) > 0) {
+                            return 'info';
+                        }
+                        return 'gray';
+                    }),
 
                 TextColumn::make('last_aired_at')
                     ->label('Son Yayın Tarihi')
