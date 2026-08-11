@@ -285,7 +285,35 @@ class ProgramResourceTest extends TestCase
         
         // SQLite test
         \App\Filament\Resources\Programs\Tables\ProgramsTable::applyTurkishSort($query, 'name', 'asc');
+        $this->assertStringContainsString("CASE WHEN status = 'archived' THEN 1 ELSE 0 END ASC", $query->toSql());
         $this->assertStringContainsString('LOWER(name) ASC', $query->toSql());
+    }
+
+    public function test_programs_default_sorting_places_non_archived_first_and_archived_at_bottom_in_alphabetical_order(): void
+    {
+        $archiveCategory = \App\Models\Category::create([
+            'name' => 'Arşiv',
+            'slug' => 'arsiv',
+            'is_active' => true,
+        ]);
+
+        $progAkla = Program::create(['name' => 'Akla Kapı', 'slug' => 'akla-kapi', 'status' => 'active']);
+        $progZ = Program::create(['name' => 'Z Programı', 'slug' => 'z-programi', 'status' => 'active']);
+        $progBabi = Program::create(['name' => 'Bab-ı Reyyan', 'slug' => 'bab-i-reyyan', 'status' => 'active']);
+        $progBabi->categories()->attach($archiveCategory);
+
+        $progArchivedA = Program::create(['name' => 'A Eski Program', 'slug' => 'a-eski-program', 'status' => 'archived', 'show_on_public' => false, 'is_active' => false]);
+        $progArchivedB = Program::create(['name' => 'B Eski Program', 'slug' => 'b-eski-program', 'status' => 'archived', 'show_on_public' => false, 'is_active' => false]);
+
+        Livewire::actingAs($this->admin)
+            ->test(ListPrograms::class)
+            ->assertCanSeeTableRecords([
+                $progAkla,
+                $progBabi,
+                $progZ,
+                $progArchivedA,
+                $progArchivedB,
+            ], inOrder: true);
     }
 
     public function test_program_edit_episodes_relation_manager_only_shows_episodes_for_that_program(): void

@@ -163,6 +163,9 @@ class ProgramsTable
         $connection = $query->getConnection();
         $driver = $connection->getDriverName();
 
+        // Push management-archived programs to the bottom; active programs remain at the top
+        $query->orderByRaw("CASE WHEN status = 'archived' THEN 1 ELSE 0 END ASC");
+
         if ($driver === 'mysql') {
             $version = '';
             try {
