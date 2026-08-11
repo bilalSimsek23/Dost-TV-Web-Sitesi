@@ -8,15 +8,22 @@ use App\Models\Program;
 use Filament\Actions\Action;
 use Filament\Actions\CreateAction;
 use Filament\Resources\Pages\ListRecords;
+use Livewire\Attributes\Url;
 
 class ListEpisodes extends ListRecords
 {
     protected static string $resource = EpisodeResource::class;
 
+    #[Url]
+    public ?string $program_id = null;
+
+    #[Url]
+    public ?string $season_number = null;
+
     public function getSubheading(): ?string
     {
-        $programId = request()->query('program_id');
-        $season = request()->query('season_number');
+        $programId = $this->program_id ?? request()->query('program_id');
+        $season = $this->season_number ?? request()->query('season_number');
 
         if (filled($programId)) {
             $program = Program::find($programId);
@@ -39,13 +46,15 @@ class ListEpisodes extends ListRecords
 
     protected function getHeaderActions(): array
     {
-        $programId = request()->query('program_id');
-        $season = request()->query('season_number');
+        $programId = $this->program_id ?? request()->query('program_id');
+        $season = $this->season_number ?? request()->query('season_number');
 
         if (filled($programId)) {
-            $seasonQuery = filled($season) && $season !== 'none' ? "&season_number={$season}" : '';
-            $createUrl = static::getResource()::getUrl('create') . "?program_id={$programId}" . $seasonQuery;
-            $importUrl = static::getResource()::getUrl('youtube-import') . "?program_id={$programId}" . $seasonQuery;
+            $seasonValue = (filled($season) && $season !== 'none') ? $season : '';
+            $createUrl = static::getResource()::getUrl('create') . "?program_id={$programId}"
+                . (filled($seasonValue) ? "&season_number={$seasonValue}" : '');
+            $importUrl = static::getResource()::getUrl('youtube-import') . "?program_id={$programId}"
+                . (filled($seasonValue) ? "&season_number={$seasonValue}" : '');
 
             return [
                 Action::make('back_to_main')
@@ -53,26 +62,25 @@ class ListEpisodes extends ListRecords
                     ->color('gray')
                     ->url(static::getResource()::getUrl('index')),
 
+                Action::make('youtube_import')
+                    ->label("YouTube'dan İçe Aktar")
+                    ->icon('heroicon-o-arrow-down-tray')
+                    ->color('danger')
+                    ->url($importUrl),
+
                 Action::make('create_episode')
                     ->label('+ Yeni Bölüm')
                     ->color('success')
                     ->icon('heroicon-o-plus')
                     ->url($createUrl),
-
-                Action::make('youtube_import')
-                    ->label('YouTube Playlist İçe Aktar')
-                    ->icon('heroicon-o-arrow-down-tray')
-                    ->color('danger')
-                    ->url($importUrl),
             ];
         }
 
-        // Global + Yeni Bölüm action for main index view (mode A)
         return [
             CreateAction::make()
-                ->label('+ Yeni Bölüm')
-                ->icon('heroicon-o-plus')
-                ->color('primary'),
+                ->label('+ Yeni Bölüm'),
         ];
     }
 }
+
+

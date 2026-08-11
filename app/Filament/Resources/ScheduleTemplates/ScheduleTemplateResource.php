@@ -5,6 +5,7 @@ namespace App\Filament\Resources\ScheduleTemplates;
 use App\Filament\Resources\ScheduleTemplates\Pages\CreateScheduleTemplate;
 use App\Filament\Resources\ScheduleTemplates\Pages\EditScheduleTemplate;
 use App\Filament\Resources\ScheduleTemplates\Pages\ListScheduleTemplates;
+use App\Filament\Resources\ScheduleTemplates\Pages\ScheduleExcelImportPage;
 use App\Filament\Resources\ScheduleTemplates\Schemas\ScheduleTemplateForm;
 use App\Filament\Resources\ScheduleTemplates\Tables\ScheduleTemplatesTable;
 use App\Models\ScheduleTemplate;
@@ -53,6 +54,7 @@ class ScheduleTemplateResource extends Resource
             'index' => ListScheduleTemplates::route('/'),
             'create' => CreateScheduleTemplate::route('/create'),
             'edit' => EditScheduleTemplate::route('/{record}/edit'),
+            'excel-import' => ScheduleExcelImportPage::route('/excel-import'),
         ];
     }
 }

@@ -11,6 +11,7 @@ use App\Services\Schedule\ScheduleExcelImportService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Livewire\Livewire;
+use PhpOffice\PhpSpreadsheet\IOFactory;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use Tests\TestCase;
@@ -543,6 +544,386 @@ class ScheduleExcelImportTest extends TestCase
         $this->assertDatabaseHas('schedule_templates', ['id' => $template->id]);
     }
 
+    public function test_dosttv_standard_template_generation_contains_all_programs_in_turkish_order_and_types(): void
+    {
+        $inactiveProg = Program::create(['name' => 'Arşiv Programı', 'slug' => 'arsiv-programi', 'is_active' => false, 'status' => 'archived']);
+
+        $service = new ScheduleExcelImportService();
+        $filePath = $service->generateDostTvStandardTemplate();
+
+        $this->assertFileExists($filePath);
+
+        $spreadsheet = IOFactory::load($filePath);
+        $progSheet = $spreadsheet->getSheetByName('Programlar');
+        $this->assertNotNull($progSheet);
+
+        $progValues = [];
+        for ($r = 1; $r <= 20; $r++) {
+            $val = $progSheet->getCell("A{$r}")->getValue();
+            if (filled($val)) {
+                $progValues[] = $val;
+            }
+        }
+
+        $this->assertContains('Bab-ı Reyyan', $progValues);
+        $this->assertContains('Mukabele', $progValues);
+        $this->assertContains('Arşiv Programı', $progValues);
+
+        $typeValues = [];
+        for ($r = 1; $r <= 5; $r++) {
+            $val = $progSheet->getCell("B{$r}")->getValue();
+            if (filled($val)) {
+                $typeValues[] = $val;
+            }
+        }
+        $this->assertContains('CANLI', $typeValues);
+        $this->assertContains('TEKRAR', $typeValues);
+        $this->assertContains('PAKET', $typeValues);
+
+        @unlink($filePath);
+    }
+
+    public function test_dosttv_multiday_excel_parsing_and_import_with_24h_validation(): void
+    {
+        $file = $this->createDostTvMultiDayExcelFile('2026 Güz Dönemi', '01.09.2026', '31.12.2026', [
+            // Pazartesi
+            0 => [
+                ['00:00', '08:00', 'Bab-ı Reyyan', 'Normal', 'Gece Yayını'],
+                ['08:00', '14:00', 'Mukabele', 'CANLI', 'Sabah Mukabelesi'],
+                ['14:00', '20:00', 'Bab-ı Reyyan', 'TEKRAR', 'Öğle Tekrarı'],
+                ['20:00', '00:00', 'Mukabele', 'PAKET', 'Akşam Yayını'],
+            ],
+            // Salı
+            1 => [
+                ['00:00', '12:00', 'Bab-ı Reyyan', 'Normal', ''],
+                ['12:00', '00:00', 'Mukabele', 'Normal', ''],
+            ],
+            // Çarşamba
+            2 => [
+                ['00:00', '12:00', 'Bab-ı Reyyan', 'Normal', ''],
+                ['12:00', '00:00', 'Mukabele', 'Normal', ''],
+            ],
+            // Perşembe
+            3 => [
+                ['00:00', '12:00', 'Bab-ı Reyyan', 'Normal', ''],
+                ['12:00', '00:00', 'Mukabele', 'Normal', ''],
+            ],
+            // Cuma
+            4 => [
+                ['00:00', '12:00', 'Bab-ı Reyyan', 'CANLI', ''],
+                ['12:00', '00:00', 'Mukabele', 'Normal', ''],
+            ],
+            // Cumartesi
+            5 => [
+                ['00:00', '12:00', 'Bab-ı Reyyan', 'Normal', ''],
+                ['12:00', '00:00', 'Mukabele', 'Normal', ''],
+            ],
+            // Pazar
+            6 => [
+                ['00:00', '12:00', 'Bab-ı Reyyan', 'Normal', ''],
+                ['12:00', '00:00', 'Mukabele', 'Normal', ''],
+            ],
+        ]);
+
+        $service = new ScheduleExcelImportService();
+        $result = $service->parseAndValidate($file);
+
+        $this->assertFalse($result['has_errors']);
+        $this->assertSame('2026 Güz Dönemi', $result['period_name']);
+        $this->assertSame('01.09.2026', $result['valid_from_formatted']);
+        $this->assertSame('31.12.2026', $result['valid_until_formatted']);
+        $this->assertSame(16, $result['total_count']);
+
+        $template = ScheduleTemplate::create([
+            'name' => $result['period_name'],
+            'valid_from' => $result['valid_from'],
+            'valid_until' => $result['valid_until'],
+            'status' => 'draft',
+            'is_active' => false,
+        ]);
+
+        $importedCount = $service->importToTemplate($template, $result['rows']);
+        $this->assertSame(16, $importedCount);
+
+        // Check imported period is draft & not active
+        $this->assertEquals('Taslak', $template->display_status);
+        $this->assertFalse($template->is_active);
+
+        // Check broadcast types and notes
+        $this->assertDatabaseHas('schedule_template_items', [
+            'schedule_template_id' => $template->id,
+            'day_of_week' => 0,
+            'start_time' => '08:00',
+            'end_time' => '14:00',
+            'is_live' => true,
+            'is_repeat' => false,
+            'note' => 'Sabah Mukabelesi',
+        ]);
+
+        $this->assertDatabaseHas('schedule_template_items', [
+            'schedule_template_id' => $template->id,
+            'day_of_week' => 0,
+            'start_time' => '14:00',
+            'end_time' => '20:00',
+            'is_live' => false,
+            'is_repeat' => true,
+            'note' => 'Öğle Tekrarı',
+        ]);
+
+        $this->assertDatabaseHas('schedule_template_items', [
+            'schedule_template_id' => $template->id,
+            'day_of_week' => 0,
+            'start_time' => '20:00',
+            'end_time' => '00:00',
+            'note' => 'Akşam Yayını',
+        ]);
+
+        @unlink($file);
+    }
+
+    public function test_dosttv_duplicate_period_name_is_rejected(): void
+    {
+        ScheduleTemplate::create([
+            'name' => 'Mevcut Dönem',
+            'status' => 'published',
+            'is_active' => true,
+        ]);
+
+        $validDay = [
+            ['00:00', '12:00', 'Bab-ı Reyyan', 'Normal', ''],
+            ['12:00', '00:00', 'Mukabele', 'Normal', ''],
+        ];
+
+        $file = $this->createDostTvMultiDayExcelFile('Mevcut Dönem', '01.09.2026', '31.12.2026', [
+            0 => $validDay, 1 => $validDay, 2 => $validDay, 3 => $validDay, 4 => $validDay, 5 => $validDay, 6 => $validDay,
+        ]);
+
+        $service = new ScheduleExcelImportService();
+        $result = $service->parseAndValidate($file);
+
+        $this->assertTrue($result['has_errors']);
+        $this->assertStringContainsString('Bu isimde bir yayın dönemi zaten mevcut', json_encode($result['errors'], JSON_UNESCAPED_UNICODE));
+
+        @unlink($file);
+    }
+
+    public function test_dosttv_overnight_broadcast_is_supported(): void
+    {
+        $validDay = [
+            ['00:00', '12:00', 'Bab-ı Reyyan', 'Normal', ''],
+            ['12:00', '00:00', 'Mukabele', 'Normal', ''],
+        ];
+
+        $file = $this->createDostTvMultiDayExcelFile('Gece Yayını Akışı', '01.09.2026', '31.12.2026', [
+            0 => [
+                ['00:00', '23:30', 'Bab-ı Reyyan', 'Normal', ''],
+                ['23:30', '01:00', 'Mukabele', 'Normal', 'Overnight'], // Overnight past midnight
+            ],
+            1 => $validDay, 2 => $validDay, 3 => $validDay, 4 => $validDay, 5 => $validDay, 6 => $validDay,
+        ]);
+
+        $service = new ScheduleExcelImportService();
+        $result = $service->parseAndValidate($file);
+
+        $this->assertFalse($result['has_errors']);
+        $this->assertTrue($result['rows'][1]['is_overnight']);
+
+        @unlink($file);
+    }
+
+    public function test_dosttv_day_not_starting_at_0000_is_rejected(): void
+    {
+        $validDay = [
+            ['00:00', '12:00', 'Bab-ı Reyyan', 'Normal', ''],
+            ['12:00', '00:00', 'Mukabele', 'Normal', ''],
+        ];
+
+        $file = $this->createDostTvMultiDayExcelFile('Hatalı Başlangıç Akışı', '01.09.2026', '31.12.2026', [
+            0 => [['08:00', '00:00', 'Bab-ı Reyyan', 'Normal', '']], // Starts at 08:00 instead of 00:00
+            1 => $validDay, 2 => $validDay, 3 => $validDay, 4 => $validDay, 5 => $validDay, 6 => $validDay,
+        ]);
+
+        $service = new ScheduleExcelImportService();
+        $result = $service->parseAndValidate($file);
+
+        $this->assertTrue($result['has_errors']);
+        $this->assertStringContainsString('00:00\'da başlamalıdır', json_encode($result['errors'], JSON_UNESCAPED_UNICODE));
+
+        @unlink($file);
+    }
+
+    public function test_dosttv_day_not_ending_at_0000_is_rejected(): void
+    {
+        $validDay = [
+            ['00:00', '12:00', 'Bab-ı Reyyan', 'Normal', ''],
+            ['12:00', '00:00', 'Mukabele', 'Normal', ''],
+        ];
+
+        $file = $this->createDostTvMultiDayExcelFile('Hatalı Bitiş Akışı', '01.09.2026', '31.12.2026', [
+            0 => [['00:00', '22:00', 'Bab-ı Reyyan', 'Normal', '']], // Ends at 22:00 instead of 00:00
+            1 => $validDay, 2 => $validDay, 3 => $validDay, 4 => $validDay, 5 => $validDay, 6 => $validDay,
+        ]);
+
+        $service = new ScheduleExcelImportService();
+        $result = $service->parseAndValidate($file);
+
+        $this->assertTrue($result['has_errors']);
+        $this->assertStringContainsString('00:00\'da tamamlanmamıştır', json_encode($result['errors'], JSON_UNESCAPED_UNICODE));
+
+        @unlink($file);
+    }
+
+    public function test_dosttv_broadcast_gap_is_rejected(): void
+    {
+        $validDay = [
+            ['00:00', '12:00', 'Bab-ı Reyyan', 'Normal', ''],
+            ['12:00', '00:00', 'Mukabele', 'Normal', ''],
+        ];
+
+        $file = $this->createDostTvMultiDayExcelFile('Boşluklu Akış', '01.09.2026', '31.12.2026', [
+            0 => [
+                ['00:00', '10:00', 'Bab-ı Reyyan', 'Normal', ''],
+                ['11:00', '00:00', 'Mukabele', 'Normal', ''], // Gap from 10:00 to 11:00
+            ],
+            1 => $validDay, 2 => $validDay, 3 => $validDay, 4 => $validDay, 5 => $validDay, 6 => $validDay,
+        ]);
+
+        $service = new ScheduleExcelImportService();
+        $result = $service->parseAndValidate($file);
+
+        $this->assertTrue($result['has_errors']);
+        $this->assertStringContainsString('Yayın boşluğu', json_encode($result['errors'], JSON_UNESCAPED_UNICODE));
+
+        @unlink($file);
+    }
+
+    public function test_schedule_templates_index_has_excel_download_and_import_buttons(): void
+    {
+        Livewire::actingAs($this->user)
+            ->test(\App\Filament\Resources\ScheduleTemplates\Pages\ListScheduleTemplates::class)
+            ->assertActionExists('download_template')
+            ->assertActionExists('excel_import')
+            ->assertActionExists('create');
+    }
+
+    public function test_schedule_excel_import_livewire_page_end_to_end(): void
+    {
+        $file = $this->createDostTvMultiDayExcelFile('2026 Canlı Test Akışı', '01.09.2026', '31.12.2026', [
+            0 => [
+                ['00:00', '12:00', 'Bab-ı Reyyan', 'CANLI', 'Canlı Gece'],
+                ['12:00', '00:00', 'Mukabele', 'Normal', ''],
+            ],
+            1 => [
+                ['00:00', '12:00', 'Mukabele', 'TEKRAR', ''],
+                ['12:00', '00:00', 'Bab-ı Reyyan', 'Normal', ''],
+            ],
+            2 => [
+                ['00:00', '12:00', 'Bab-ı Reyyan', 'Normal', ''],
+                ['12:00', '00:00', 'Mukabele', 'Normal', ''],
+            ],
+            3 => [
+                ['00:00', '12:00', 'Mukabele', 'Normal', ''],
+                ['12:00', '00:00', 'Bab-ı Reyyan', 'Normal', ''],
+            ],
+            4 => [
+                ['00:00', '12:00', 'Bab-ı Reyyan', 'Normal', ''],
+                ['12:00', '00:00', 'Mukabele', 'Normal', ''],
+            ],
+            5 => [
+                ['00:00', '12:00', 'Mukabele', 'Normal', ''],
+                ['12:00', '00:00', 'Bab-ı Reyyan', 'Normal', ''],
+            ],
+            6 => [
+                ['00:00', '12:00', 'Bab-ı Reyyan', 'Normal', ''],
+                ['12:00', '00:00', 'Mukabele', 'Normal', ''],
+            ],
+        ]);
+
+        $uploadedFile = UploadedFile::fake()->createWithContent('test_dosttv.xlsx', file_get_contents($file));
+
+        Livewire::actingAs($this->user)
+            ->test(\App\Filament\Resources\ScheduleTemplates\Pages\ScheduleExcelImportPage::class)
+            ->set('data.excel_file', [$uploadedFile])
+            ->call('fetchPreview')
+            ->assertSet('isPreviewLoaded', true)
+            ->assertSet('has_errors', false)
+            ->assertSet('period_name', '2026 Canlı Test Akışı')
+            ->assertSet('total_count', 14)
+            ->call('createSchedulePeriod')
+            ->assertSet('isImported', true);
+
+        $this->assertDatabaseHas('schedule_templates', [
+            'name' => '2026 Canlı Test Akışı',
+            'status' => 'draft',
+            'is_active' => false,
+        ]);
+
+        $this->assertDatabaseHas('schedule_template_items', [
+            'day_of_week' => 0,
+            'is_live' => true,
+            'note' => 'Canlı Gece',
+        ]);
+
+        @unlink($file);
+    }
+
+    protected function createDostTvMultiDayExcelFile(string $periodName, string $from, string $until, array $daysSchedule): string
+    {
+        $spreadsheet = new Spreadsheet();
+        $sheet = $spreadsheet->getActiveSheet();
+        $sheet->setTitle('Yayın Akışı');
+
+        $sheet->setCellValue('A1', 'DOST TV YAYIN AKIŞI DÖNEM ŞABLONU');
+        $sheet->setCellValue('A3', 'Akış Adı *');
+        $sheet->setCellValue('B3', $periodName);
+        $sheet->setCellValue('A4', 'Başlangıç Tarihi *');
+        $sheet->setCellValue('B4', $from);
+        $sheet->setCellValue('A5', 'Bitiş Tarihi *');
+        $sheet->setCellValue('B5', $until);
+
+        $curRow = 7;
+        $dayNames = ['PAZARTESİ', 'SALI', 'ÇARŞAMBA', 'PERŞEMBE', 'CUMA', 'CUMARTESİ', 'PAZAR'];
+
+        foreach ($dayNames as $idx => $dName) {
+            $sheet->setCellValue("A{$curRow}", $dName);
+            $sheet->setCellValue("A" . ($curRow + 1), 'Başlangıç');
+            $sheet->setCellValue("B" . ($curRow + 1), 'Bitiş');
+            $sheet->setCellValue("C" . ($curRow + 1), 'Program');
+            $sheet->setCellValue("D" . ($curRow + 1), 'Yayın Türü');
+            $sheet->setCellValue("E" . ($curRow + 1), 'Not');
+
+            $dataRows = $daysSchedule[$idx] ?? [];
+            $rowPtr = $curRow + 2;
+
+            foreach ($dataRows as $rData) {
+                $sheet->setCellValue("A{$rowPtr}", $rData[0] ?? '');
+                $sheet->setCellValue("B{$rowPtr}", $rData[1] ?? '');
+                $sheet->setCellValue("C{$rowPtr}", $rData[2] ?? '');
+                $sheet->setCellValue("D{$rowPtr}", $rData[3] ?? '');
+                $sheet->setCellValue("E{$rowPtr}", $rData[4] ?? '');
+                $rowPtr++;
+            }
+
+            // fill extra empty rows up to 25 rows
+            while ($rowPtr < $curRow + 27) {
+                $sheet->setCellValue("A{$rowPtr}", '');
+                $sheet->setCellValue("B{$rowPtr}", '');
+                $sheet->setCellValue("C{$rowPtr}", '');
+                $sheet->setCellValue("D{$rowPtr}", '');
+                $sheet->setCellValue("E{$rowPtr}", '');
+                $rowPtr++;
+            }
+
+            $curRow = $rowPtr + 2;
+        }
+
+        $tempPath = tempnam(sys_get_temp_dir(), 'test_dosttv_excel_') . '.xlsx';
+        $writer = new Xlsx($spreadsheet);
+        $writer->save($tempPath);
+
+        return $tempPath;
+    }
+
     protected function createExcelFile(array $rows): string
     {
         $spreadsheet = new Spreadsheet();
@@ -556,3 +937,4 @@ class ScheduleExcelImportTest extends TestCase
         return $tempPath;
     }
 }
+

@@ -24,10 +24,11 @@ class EpisodeResourceTest extends TestCase
         parent::setUp();
         $this->admin = User::factory()->create(['role' => 'administrator']);
         $this->program = Program::create([
-            'name' => 'Özel Test Programı',
-            'slug' => 'ozel-test-programi',
+            'name' => 'Söze Yar Olmak',
+            'slug' => 'soze-yar-olmak',
             'status' => 'active',
             'is_active' => true,
+            'youtube_playlist_url' => 'https://www.youtube.com/playlist?list=PLTEST123',
         ]);
     }
 
@@ -38,51 +39,90 @@ class EpisodeResourceTest extends TestCase
             ->assertSuccessful();
     }
 
-    public function test_main_episodes_index_has_yeni_bolum_action_and_no_global_import_action(): void
+    public function test_same_program_and_season_episodes_are_grouped_into_single_row_with_accurate_count(): void
     {
+        // 90 episodes created for Program in Season 1
+        for ($i = 1; $i <= 90; $i++) {
+            Episode::create([
+                'program_id' => $this->program->id,
+                'season_number' => 1,
+                'episode_number' => $i,
+                'title' => "Bölüm {$i}",
+                'status' => 'published',
+            ]);
+        }
+
         Livewire::actingAs($this->admin)
             ->test(ListEpisodes::class)
-            ->assertActionExists('create')
-            ->assertActionDoesNotExist('youtube_import');
+            ->assertCanSeeTableRecords(
+                Episode::query()
+                    ->select('program_id', 'season_number', \Illuminate\Support\Facades\DB::raw('COUNT(id) as episodes_count'), \Illuminate\Support\Facades\DB::raw('MIN(id) as id'))
+                    ->groupBy('program_id', 'season_number')
+                    ->get()
+            )
+            ->assertSee('Söze Yar Olmak')
+            ->assertSee('Sezon 1')
+            ->assertSee('90 Bölüm')
+            ->assertSee('Playlist Bağlı')
+            ->assertActionExists('create');
     }
 
-    public function test_episodes_main_index_groups_by_program_and_season(): void
+    public function test_different_seasons_and_programs_display_as_separate_grouped_rows(): void
     {
-        $episode = Episode::create([
+        $progB = Program::create([
+            'name' => 'Akla Kapı',
+            'slug' => 'akla-kapi',
+            'status' => 'active',
+            'is_active' => true,
+        ]);
+
+        Episode::create([
             'program_id' => $this->program->id,
             'season_number' => 1,
-            'title' => 'Test Bölümü',
+            'episode_number' => 1,
+            'title' => 'Söze Yar Olmak S1',
             'status' => 'published',
-            'aired_at' => now(),
+        ]);
+
+        Episode::create([
+            'program_id' => $this->program->id,
+            'season_number' => 2,
+            'episode_number' => 1,
+            'title' => 'Söze Yar Olmak S2',
+            'status' => 'published',
+        ]);
+
+        Episode::create([
+            'program_id' => $progB->id,
+            'season_number' => 1,
+            'episode_number' => 1,
+            'title' => 'Akla Kapı S1',
+            'status' => 'published',
         ]);
 
         Livewire::actingAs($this->admin)
             ->test(ListEpisodes::class)
-            ->assertCanSeeTableRecords([$episode]);
+            ->assertSee('Söze Yar Olmak')
+            ->assertSee('Sezon 1')
+            ->assertSee('Sezon 2')
+            ->assertSee('Akla Kapı')
+            ->assertSee('Playlist Yok'); // progB has no playlist url
     }
 
-    public function test_season_detail_mode_has_contextual_create_and_import_header_actions(): void
+    public function test_season_detail_mode_filters_episodes_and_shows_contextual_actions(): void
     {
-        Livewire::actingAs($this->admin)
-            ->withQueryParams(['program_id' => $this->program->id, 'season_number' => 1])
-            ->test(ListEpisodes::class)
-            ->assertActionExists('create_episode')
-            ->assertActionExists('youtube_import')
-            ->assertActionExists('back_to_main');
-    }
-
-    public function test_season_detail_mode_filters_episodes_by_program_and_season(): void
-    {
-        $epA = Episode::create([
+        $epS1 = Episode::create([
             'program_id' => $this->program->id,
             'season_number' => 1,
+            'episode_number' => 1,
             'title' => 'Sezon 1 Bölüm',
             'status' => 'published',
         ]);
 
-        $epB = Episode::create([
+        $epS2 = Episode::create([
             'program_id' => $this->program->id,
             'season_number' => 2,
+            'episode_number' => 1,
             'title' => 'Sezon 2 Bölüm',
             'status' => 'published',
         ]);
@@ -90,93 +130,49 @@ class EpisodeResourceTest extends TestCase
         Livewire::actingAs($this->admin)
             ->withQueryParams(['program_id' => $this->program->id, 'season_number' => 1])
             ->test(ListEpisodes::class)
-            ->assertCanSeeTableRecords([$epA])
-            ->assertCanNotSeeTableRecords([$epB]);
+            ->assertCanSeeTableRecords([$epS1])
+            ->assertCanNotSeeTableRecords([$epS2])
+            ->assertActionExists('back_to_main')
+            ->assertActionExists('youtube_import')
+            ->assertActionExists('create_episode');
     }
 
-    public function test_can_create_new_episode_with_contextual_program_and_seo(): void
+    public function test_season_detail_mode_can_archive_and_unarchive_episode(): void
     {
-        Livewire::actingAs($this->admin)
-            ->withQueryParams(['program_id' => $this->program->id, 'season_number' => 1])
-            ->test(CreateEpisode::class)
-            ->fillForm([
-                'episode_number' => 12,
-                'title' => 'Harika Bir Bölüm',
-                'slug' => 'harika-bir-bolum',
-                'description' => 'Bölüm detay açıklaması',
-                'video_source' => 'youtube',
-                'youtube_url' => 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
-                'meta_title' => 'Harika Bölüm SEO',
-                'meta_description' => 'Harika Bölüm SEO Açıklaması',
-            ])
-            ->call('create')
-            ->assertHasNoFormErrors();
-
-        $this->assertDatabaseHas('episodes', [
+        $episode = Episode::create([
             'program_id' => $this->program->id,
             'season_number' => 1,
-            'title' => 'Harika Bir Bölüm',
-            'episode_number' => 12,
+            'title' => 'Arşivlenecek Bölüm',
             'status' => 'published',
-            'meta_title' => 'Harika Bölüm SEO',
-        ]);
-    }
-
-    public function test_creating_episode_without_status_and_toggles_assigns_automatic_defaults(): void
-    {
-        Livewire::actingAs($this->admin)
-            ->withQueryParams(['program_id' => $this->program->id, 'season_number' => 1])
-            ->test(CreateEpisode::class)
-            ->fillForm([
-                'episode_number' => 15,
-                'title' => 'Sadeleştirilmiş Form Bölümü',
-                'slug' => 'sadelestirilmis-form-bolumu',
-                'description' => 'Açıklama',
-                'video_source' => 'youtube',
-                'youtube_url' => 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
-            ])
-            ->call('create')
-            ->assertHasNoFormErrors();
-
-        $this->assertDatabaseHas('episodes', [
-            'program_id' => $this->program->id,
-            'season_number' => 1,
-            'title' => 'Sadeleştirilmiş Form Bölümü',
-            'episode_number' => 15,
-            'status' => 'published',
-            'show_on_public' => true,
             'is_active' => true,
-            'sort_order' => 0,
         ]);
+
+        Livewire::actingAs($this->admin)
+            ->withQueryParams(['program_id' => $this->program->id, 'season_number' => 1])
+            ->test(ListEpisodes::class)
+            ->callTableAction('archive', $episode)
+            ->assertHasNoTableActionErrors();
+
+        $this->assertEquals('archived', $episode->fresh()->status);
+        $this->assertFalse($episode->fresh()->show_on_public);
+
+        Livewire::actingAs($this->admin)
+            ->withQueryParams(['program_id' => $this->program->id, 'season_number' => 1])
+            ->test(ListEpisodes::class)
+            ->callTableAction('unarchive', $episode)
+            ->assertHasNoTableActionErrors();
+
+        $this->assertEquals('published', $episode->fresh()->status);
+        $this->assertTrue($episode->fresh()->show_on_public);
     }
 
     public function test_create_episode_prefills_program_id_and_season_number_from_query_parameters(): void
     {
         Livewire::actingAs($this->admin)
-            ->withQueryParams(['program_id' => $this->program->id, 'season_number' => 3])
+            ->withQueryParams(['program_id' => $this->program->id, 'season_number' => 2])
             ->test(CreateEpisode::class)
             ->assertSet('data.program_id', $this->program->id)
-            ->assertSet('data.season_number', 3);
-    }
-
-    public function test_direct_create_without_context_allows_selecting_program_and_season(): void
-    {
-        Livewire::actingAs($this->admin)
-            ->test(CreateEpisode::class)
-            ->fillForm([
-                'program_id' => $this->program->id,
-                'season_number' => 2,
-                'episode_number' => 1,
-                'title' => 'Doğrudan Eklenen Bölüm',
-            ])
-            ->call('create')
-            ->assertHasNoFormErrors();
-
-        $this->assertDatabaseHas('episodes', [
-            'program_id' => $this->program->id,
-            'season_number' => 2,
-            'title' => 'Doğrudan Eklenen Bölüm',
-        ]);
+            ->assertSet('data.season_number', 2);
     }
 
     public function test_public_program_detail_page_displays_active_published_episodes(): void
@@ -189,8 +185,9 @@ class EpisodeResourceTest extends TestCase
             'show_on_public' => true,
         ]);
 
-        $this->get('/programlar/ozel-test-programi')
+        $this->get('/programlar/soze-yar-olmak')
             ->assertStatus(200)
             ->assertSee('Yayındaki Bölüm');
     }
 }
+

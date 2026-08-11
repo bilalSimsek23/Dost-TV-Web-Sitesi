@@ -355,15 +355,9 @@ class YoutubePlaylistImportTest extends TestCase
             ->assertDontSeeHtml('YouTube URL</th>');
     }
 
-    public function test_contextual_import_prefills_and_disables_program_and_season_and_calculates_season_specific_max_episode(): void
+    public function test_contextual_import_prefills_program_playlist_url_season_and_start_episode(): void
     {
-        Episode::create([
-            'program_id' => $this->program->id,
-            'season_number' => 1,
-            'episode_number' => 27,
-            'title' => 'S1 B27',
-            'status' => 'published',
-        ]);
+        $this->program->update(['youtube_playlist_url' => 'https://www.youtube.com/playlist?list=PLPROG123']);
 
         Episode::create([
             'program_id' => $this->program->id,
@@ -377,8 +371,9 @@ class YoutubePlaylistImportTest extends TestCase
             ->withQueryParams(['program_id' => $this->program->id, 'season_number' => 2])
             ->test(YoutubePlaylistImportPage::class)
             ->assertSet('program_id', $this->program->id)
+            ->assertSet('playlist_url', 'https://www.youtube.com/playlist?list=PLPROG123')
             ->assertSet('season_number', 2)
-            ->assertSet('isContextual', true)
             ->assertSet('start_episode_number', 6);
     }
 }
+

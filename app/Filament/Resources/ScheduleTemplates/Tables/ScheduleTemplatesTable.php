@@ -110,6 +110,16 @@ class ScheduleTemplatesTable
                     ->icon(Heroicon::OutlinedCheckCircle)
                     ->color('success')
                     ->visible(fn (ScheduleTemplate $record) => $record->status === 'published' && ! $record->is_active)
+                    ->requiresConfirmation()
+                    ->modalHeading('Yayın Dönemini Gösterime Al')
+                    ->modalDescription(function () {
+                        $activeExists = ScheduleTemplate::where('is_active', true)->exists();
+                        if ($activeExists) {
+                            return 'Başka bir yayın dönemi şu anda gösterimde. Devam ederseniz mevcut dönem pasife alınacak ve bu dönem gösterime geçecektir.';
+                        }
+
+                        return 'Bu yayın dönemini gösterime almak istediğinize emin misiniz?';
+                    })
                     ->action(function (ScheduleTemplate $record) {
                         DB::transaction(function () use ($record) {
                             ScheduleTemplate::query()

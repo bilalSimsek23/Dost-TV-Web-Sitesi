@@ -32,17 +32,13 @@ class EpisodeForm
                                     ->relationship('program', 'name')
                                     ->searchable()
                                     ->preload()
-                                    ->required(fn ($livewire) => ! (property_exists($livewire, 'contextProgramId') && filled($livewire->contextProgramId)) && ! request()->has('program_id'))
-                                    ->disabled(fn ($livewire) => (property_exists($livewire, 'contextProgramId') && filled($livewire->contextProgramId)) || filled(request()->query('program_id')))
-                                    ->dehydrated(true),
+                                    ->required(),
 
                                 Grid::make(2)->schema([
                                     TextInput::make('season_number')
                                         ->label('Sezon Numarası')
                                         ->numeric()
-                                        ->placeholder('Örn: 1')
-                                        ->disabled(fn ($livewire) => (property_exists($livewire, 'contextSeasonNumber') && $livewire->contextSeasonNumber !== null) || filled(request()->query('season_number')))
-                                        ->dehydrated(true),
+                                        ->placeholder('Örn: 1'),
 
                                     TextInput::make('episode_number')
                                         ->label('Bölüm Numarası')

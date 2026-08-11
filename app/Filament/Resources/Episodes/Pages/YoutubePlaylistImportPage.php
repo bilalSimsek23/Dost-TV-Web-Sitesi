@@ -42,8 +42,6 @@ class YoutubePlaylistImportPage extends Page implements HasForms
 
     public bool $strip_program_name = false;
 
-    public bool $isContextual = false;
-
     public string $status = 'published';
 
     public bool $show_on_public = true;
@@ -78,12 +76,8 @@ class YoutubePlaylistImportPage extends Page implements HasForms
                     ->options(Program::orderBy('name')->pluck('name', 'id'))
                     ->searchable()
                     ->required()
-                    ->disabled(fn () => $this->isContextual)
                     ->live()
                     ->afterStateUpdated(function ($state, $set) {
-                        if ($this->isContextual) {
-                            return;
-                        }
                         $this->program_id = $state ? (int) $state : null;
                         $this->isPreviewLoaded = false;
                         $this->previewItems = [];
@@ -104,13 +98,12 @@ class YoutubePlaylistImportPage extends Page implements HasForms
                 TextInput::make('season_number')
                     ->label('Sezon Numarası')
                     ->numeric()
-                    ->disabled(fn () => $this->isContextual)
                     ->default(1),
 
                 TextInput::make('start_episode_number')
                     ->label('Başlangıç Bölüm Numarası')
                     ->numeric()
-                    ->helperText($this->isContextual ? 'Varsayılan: Seçilen Sezonun (Max Bölüm No + 1)' : 'Varsayılan: Seçilen programın (Max Bölüm No + 1)'),
+                    ->helperText('Varsayılan: Seçilen programın (Max Bölüm No + 1)'),
 
                 Checkbox::make('strip_program_name')
                     ->label('Program adını başlıktan kaldır')
@@ -123,19 +116,26 @@ class YoutubePlaylistImportPage extends Page implements HasForms
     public function mount(): void
     {
         $requestedProgramId = request()->query('program_id');
-        $requestedSeason = request()->query('season_number');
-
         if (filled($requestedProgramId) && Program::where('id', $requestedProgramId)->exists()) {
             $this->program_id = (int) $requestedProgramId;
-            $this->season_number = (filled($requestedSeason) && $requestedSeason !== 'none') ? (int) $requestedSeason : 1;
-            $this->isContextual = true;
+            $program = Program::find($this->program_id);
+            if ($program && filled($program->youtube_playlist_url)) {
+                $this->playlist_url = $program->youtube_playlist_url;
+            }
 
-            $maxEp = Episode::where('program_id', $this->program_id)
-                ->when($requestedSeason === 'none' || blank($requestedSeason), fn ($q) => $q->whereNull('season_number'))
-                ->when(filled($requestedSeason) && $requestedSeason !== 'none', fn ($q) => $q->where('season_number', $this->season_number))
-                ->max('episode_number') ?? 0;
-
-            $this->start_episode_number = $maxEp + 1;
+            $requestedSeason = request()->query('season_number');
+            if (filled($requestedSeason) && $requestedSeason !== 'none') {
+                $this->season_number = (int) $requestedSeason;
+                $maxEp = Episode::where('program_id', $this->program_id)
+                    ->where('season_number', $this->season_number)
+                    ->max('episode_number')
+                    ?? Episode::where('program_id', $this->program_id)->max('episode_number')
+                    ?? 0;
+                $this->start_episode_number = $maxEp + 1;
+            } else {
+                $maxEp = Episode::where('program_id', $this->program_id)->max('episode_number') ?? 0;
+                $this->start_episode_number = $maxEp + 1;
+            }
         }
 
         $this->form->fill([
@@ -151,15 +151,10 @@ class YoutubePlaylistImportPage extends Page implements HasForms
     {
         $formData = array_merge($this->data ?? [], $this->form->getRawState() ?? []);
 
-        if (! $this->isContextual && ! empty($formData['program_id'])) {
-            $this->program_id = (int) $formData['program_id'];
-        }
-
-        if (! $this->isContextual && isset($formData['season_number'])) {
-            $this->season_number = (int) $formData['season_number'];
-        }
-
+        $this->program_id = ! empty($formData['program_id']) ? (int) $formData['program_id'] : ($this->program_id ?? null);
         $this->playlist_url = ! empty($formData['playlist_url']) ? $formData['playlist_url'] : ($this->playlist_url ?? '');
+
+        $this->season_number = (int) ($formData['season_number'] ?? 1);
         $this->start_episode_number = (int) ($formData['start_episode_number'] ?? 1);
         $this->strip_program_name = (bool) ($formData['strip_program_name'] ?? false);
         $this->status = 'published';
