@@ -163,6 +163,30 @@ class ProgramResourceTest extends TestCase
         $this->assertFalse($fresh->is_active);
     }
 
+    public function test_featured_toggle_column_toggles_is_featured_on_single_click(): void
+    {
+        $program = Program::create([
+            'name' => 'Öne Çıkan Aday Program',
+            'slug' => 'one-cikan-aday-program',
+            'status' => 'active',
+            'is_featured' => false,
+        ]);
+
+        // First click: false -> true
+        Livewire::actingAs($this->admin)
+            ->test(ListPrograms::class)
+            ->callTableColumnAction('is_featured', $program);
+
+        $this->assertTrue($program->fresh()->is_featured);
+
+        // Second click: true -> false
+        Livewire::actingAs($this->admin)
+            ->test(ListPrograms::class)
+            ->callTableColumnAction('is_featured', $program);
+
+        $this->assertFalse($program->fresh()->is_featured);
+    }
+
     public function test_create_episode_page_prefills_program_id_from_query_parameter(): void
     {
         $program = Program::create([

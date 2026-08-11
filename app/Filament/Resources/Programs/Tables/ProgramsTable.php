@@ -73,10 +73,19 @@ class ProgramsTable
                 IconColumn::make('is_featured')
                     ->label('Öne Çıkan')
                     ->boolean()
-                    ->trueIcon('heroicon-o-star')
+                    ->trueIcon('heroicon-s-star')
                     ->falseIcon('heroicon-o-star')
                     ->trueColor('amber')
-                    ->falseColor('gray'),
+                    ->falseColor('gray')
+                    ->action(function (Program $record) {
+                        $newFeatured = ! $record->is_featured;
+                        $record->update(['is_featured' => $newFeatured]);
+                        Notification::make()
+                            ->title("{$record->name} " . ($newFeatured ? 'öne çıkarıldı.' : 'öne çıkanlardan kaldırıldı.'))
+                            ->success()
+                            ->send();
+                    })
+                    ->tooltip(fn (Program $record) => $record->is_featured ? 'Öne çıkandan kaldırmak için tıklayın' : 'Öne çıkarmak için tıklayın'),
             ])
             ->filters([
                 SelectFilter::make('status')
