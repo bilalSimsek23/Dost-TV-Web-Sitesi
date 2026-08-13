@@ -32,9 +32,10 @@ class EpisodeForm
                                     ->relationship('program', 'name')
                                     ->searchable()
                                     ->preload()
+                                    ->live()
                                     ->required(),
 
-                                Grid::make(3)->schema([
+                                Grid::make(4)->schema([
                                     TextInput::make('season_number')
                                         ->label('Sezon Numarası')
                                         ->numeric()
@@ -49,6 +50,17 @@ class EpisodeForm
                                             'regex' => 'Sezon yılı YYYY (örn: 2017) veya YYYY-YYYY (örn: 2022-2023) formatında olmalıdır.',
                                         ]),
 
+                                    Select::make('program_series_id')
+                                        ->label('Alt Seri')
+                                        ->placeholder('Seri Seçin')
+                                        ->helperText('Opsiyonel (Örn: Lemalar)')
+                                        ->relationship(
+                                            name: 'programSeries',
+                                            titleAttribute: 'name',
+                                            modifyQueryUsing: fn ($query, $get) => $get('program_id') ? $query->where('program_id', $get('program_id')) : $query
+                                        )
+                                        ->searchable()
+                                        ->preload(),
 
                                     TextInput::make('episode_number')
                                         ->label('Bölüm Numarası')

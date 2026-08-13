@@ -23,6 +23,11 @@ class CreateEpisode extends BaseCreateRecord
         if (request()->has('season_year') && request()->query('season_year') !== 'none' && filled(request()->query('season_year'))) {
             $fillData['season_year'] = trim((string) request()->query('season_year'));
         }
+        if (request()->has('program_series_id') && request()->query('program_series_id') !== 'none') {
+            $fillData['program_series_id'] = (int) request()->query('program_series_id');
+        } elseif (request()->has('series_id') && request()->query('series_id') !== 'none') {
+            $fillData['program_series_id'] = (int) request()->query('series_id');
+        }
 
         if (! empty($fillData)) {
             $this->form->fill($fillData);

@@ -78,6 +78,13 @@ class EpisodesRelationManager extends RelationManager
                     ->searchable()
                     ->sortable(),
 
+                TextColumn::make('programSeries.name')
+                    ->label('Seri')
+                    ->badge()
+                    ->color('warning')
+                    ->placeholder('—')
+                    ->sortable(),
+
                 TextColumn::make('title')
                     ->label('Bölüm Başlığı')
                     ->searchable()
@@ -112,7 +119,9 @@ class EpisodesRelationManager extends RelationManager
                     ->label("YouTube ile Senkronize Et")
                     ->icon('heroicon-o-arrow-path')
                     ->color('warning')
-                    ->visible(fn () => filled($this->getOwnerRecord()->youtube_playlist_url))
+                    ->visible(fn () => filled($this->getOwnerRecord()->youtube_playlist_url)
+                        || $this->getOwnerRecord()->programSeasons()->whereNotNull('youtube_playlist_url')->exists()
+                        || $this->getOwnerRecord()->programSeries()->whereNotNull('youtube_playlist_url')->exists())
                     ->action(function () {
                         $service = app(\App\Services\YouTube\YouTubePlaylistSyncService::class);
                         $result = $service->syncProgramPlaylist($this->getOwnerRecord(), false, true);

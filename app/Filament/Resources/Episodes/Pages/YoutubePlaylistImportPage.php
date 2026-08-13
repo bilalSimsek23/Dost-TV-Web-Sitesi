@@ -6,6 +6,7 @@ use App\Filament\Resources\Episodes\EpisodeResource;
 use App\Models\Episode;
 use App\Models\Program;
 use App\Models\ProgramSeason;
+use App\Models\ProgramSeries;
 use App\Services\YouTube\YouTubePlaylistImportService;
 use App\Support\Youtube;
 use Filament\Forms\Components\Checkbox;
@@ -31,13 +32,17 @@ class YoutubePlaylistImportPage extends Page implements HasForms
 
     protected string $view = 'filament.resources.episodes.pages.youtube-playlist-import-page';
 
-    public ?array $data = [];    public ?int $program_id = null;
+    public ?array $data = [];
+
+    public ?int $program_id = null;
 
     public ?string $playlist_url = '';
 
     public int $season_number = 1;
 
     public ?string $season_year = null;
+
+    public ?string $series_name = null;
 
     public ?int $start_episode_number = 1;
 
@@ -59,6 +64,12 @@ class YoutubePlaylistImportPage extends Page implements HasForms
     public int $newItemsCount = 0;
 
     public int $existingItemsCount = 0;
+
+    public int $otherSeriesItemsCount = 0;
+
+    public int $targetExistingItemsCount = 0;
+
+    public int $willImportCount = 0;
 
     // Import completion state
     public bool $isImported = false;
@@ -104,8 +115,10 @@ class YoutubePlaylistImportPage extends Page implements HasForms
 
                             $set('season_number', $suggestedSeason);
                             $set('season_year', $suggestedYear);
+                            $set('series_name', null);
                             $this->season_number = $suggestedSeason;
                             $this->season_year = $suggestedYear;
+                            $this->series_name = null;
 
                             // Resolve season-level playlist URL if exists, fallback to program-level
                             $seasonPlaylistUrl = ProgramSeason::resolvePlaylistUrl($program, $suggestedSeason, $suggestedYear);
@@ -114,19 +127,14 @@ class YoutubePlaylistImportPage extends Page implements HasForms
                                 $this->playlist_url = $seasonPlaylistUrl;
                             }
 
-                            $this->calculateStartEpisodeNumber($get, $set, $suggestedSeason, $suggestedYear);
+                            $this->calculateStartEpisodeNumber($get, $set, $suggestedSeason, $suggestedYear, null);
                         } else {
                             $set('season_number', 1);
                             $set('season_year', null);
+                            $set('series_name', null);
                             $set('start_episode_number', 1);
                         }
                     }),
-
-                TextInput::make('playlist_url')
-                    ->label('YouTube Playlist URL *')
-                    ->placeholder('https://www.youtube.com/playlist?list=...')
-                    ->required()
-                    ->url(),
 
                 TextInput::make('season_number')
                     ->label('Sezon Numarası')
@@ -138,14 +146,13 @@ class YoutubePlaylistImportPage extends Page implements HasForms
                         if ($this->program_id) {
                             $program = Program::find($this->program_id);
                             $seasonPlaylistUrl = ProgramSeason::resolvePlaylistUrl($program, $this->season_number, $this->season_year);
-                            if (filled($seasonPlaylistUrl)) {
+                            if (filled($seasonPlaylistUrl) && blank($get('series_name'))) {
                                 $set('playlist_url', $seasonPlaylistUrl);
                                 $this->playlist_url = $seasonPlaylistUrl;
                             }
                         }
                         $this->calculateStartEpisodeNumber($get, $set);
                     }),
-
 
                 TextInput::make('season_year')
                     ->label('Sezon Yılı')
@@ -161,10 +168,40 @@ class YoutubePlaylistImportPage extends Page implements HasForms
                         $this->calculateStartEpisodeNumber($get, $set);
                     }),
 
+                TextInput::make('series_name')
+                    ->label('Alt Seri')
+                    ->placeholder('Örn: Lemalar veya Sözler')
+                    ->helperText('Opsiyonel. Program içindeki alt seri başlığı (örn: Lemalar, Sözler).')
+                    ->datalist(function ($get) {
+                        $pId = $get('program_id') ?? $this->program_id;
+                        if (! $pId) {
+                            return [];
+                        }
+                        return ProgramSeries::where('program_id', $pId)->pluck('name', 'name')->toArray();
+                    })
+                    ->live()
+                    ->afterStateUpdated(function ($state, $set, $get) {
+                        $this->series_name = filled($state) ? trim((string) $state) : null;
+                        if ($this->program_id && filled($this->series_name)) {
+                            $series = ProgramSeries::findSeries((int) $this->program_id, null, $this->series_name);
+                            if ($series && filled($series->youtube_playlist_url)) {
+                                $set('playlist_url', $series->youtube_playlist_url);
+                                $this->playlist_url = $series->youtube_playlist_url;
+                            }
+                        }
+                        $this->calculateStartEpisodeNumber($get, $set);
+                    }),
+
+                TextInput::make('playlist_url')
+                    ->label('YouTube Playlist URL *')
+                    ->placeholder('https://www.youtube.com/playlist?list=...')
+                    ->required()
+                    ->url(),
+
                 TextInput::make('start_episode_number')
                     ->label('Başlangıç Bölüm Numarası')
                     ->numeric()
-                    ->helperText('Varsayılan: Seçilen program ve sezonun (Max Bölüm No + 1)'),
+                    ->helperText('Varsayılan: Seçilen program, sezon veya serinin (Max Bölüm No + 1)'),
 
                 Checkbox::make('strip_program_name')
                     ->label('Program adını başlıktan kaldır')
@@ -195,20 +232,41 @@ class YoutubePlaylistImportPage extends Page implements HasForms
         return null;
     }
 
-    public function calculateStartEpisodeNumber($get, $set, ?int $explicitSeason = null, ?string $explicitYear = null): void
-    {
+    public function calculateStartEpisodeNumber(
+        $get,
+        $set,
+        ?int $explicitSeason = null,
+        ?string $explicitYear = null,
+        ?string $explicitSeries = null
+    ): void {
         $pId = $get('program_id') ?? $this->program_id;
         $sNum = $explicitSeason !== null ? $explicitSeason : (int) ($get('season_number') ?? $this->season_number ?? 1);
         $sYear = $explicitYear !== null ? $explicitYear : (filled($get('season_year')) ? trim((string) $get('season_year')) : ($this->season_year ?? null));
+        $sSeries = $explicitSeries !== null ? $explicitSeries : (filled($get('series_name')) ? trim((string) $get('series_name')) : ($this->series_name ?? null));
 
         if ($pId) {
-            $query = Episode::where('program_id', (int) $pId)->where('season_number', $sNum);
-            if ($sYear) {
-                $query->where('season_year', $sYear);
+            $query = Episode::where('program_id', (int) $pId);
+
+            if (filled($sSeries)) {
+                $seriesModel = ProgramSeries::findSeries((int) $pId, null, (string) $sSeries);
+                if ($seriesModel) {
+                    $query->where('program_series_id', $seriesModel->id);
+                } else {
+                    $set('start_episode_number', 1);
+                    $this->start_episode_number = 1;
+                    return;
+                }
+            } else {
+                $query->where('season_number', $sNum);
+                if ($sYear) {
+                    $query->where('season_year', $sYear);
+                }
             }
+
             $maxEp = $query->max('episode_number');
-            $set('start_episode_number', $maxEp !== null ? ($maxEp + 1) : 1);
-            $this->start_episode_number = $maxEp !== null ? ($maxEp + 1) : 1;
+            $nextNum = $maxEp !== null ? ($maxEp + 1) : 1;
+            $set('start_episode_number', $nextNum);
+            $this->start_episode_number = $nextNum;
         } else {
             $set('start_episode_number', 1);
             $this->start_episode_number = 1;
@@ -227,6 +285,28 @@ class YoutubePlaylistImportPage extends Page implements HasForms
 
             $requestedSeason = request()->query('season_number');
             $requestedYear = request()->query('season_year');
+            $requestedSeriesId = request()->query('program_series_id', request()->query('series_id'));
+            $requestedSeriesName = request()->query('series_name');
+
+            if (filled($requestedSeriesId)) {
+                $seriesRecord = ProgramSeries::where('program_id', $this->program_id)->find($requestedSeriesId);
+                if ($seriesRecord) {
+                    $this->series_name = $seriesRecord->name;
+                    if (filled($seriesRecord->youtube_playlist_url)) {
+                        $this->playlist_url = $seriesRecord->youtube_playlist_url;
+                    }
+                    if ($seriesRecord->programSeason) {
+                        $this->season_number = (int) ($seriesRecord->programSeason->season_number ?? 1);
+                        $this->season_year = $seriesRecord->programSeason->season_year;
+                    }
+                }
+            } elseif (filled($requestedSeriesName)) {
+                $this->series_name = trim((string) $requestedSeriesName);
+                $seriesRecord = ProgramSeries::findSeries($this->program_id, null, $this->series_name);
+                if ($seriesRecord && filled($seriesRecord->youtube_playlist_url)) {
+                    $this->playlist_url = $seriesRecord->youtube_playlist_url;
+                }
+            }
 
             if (filled($requestedSeason) && $requestedSeason !== 'none') {
                 $this->season_number = (int) $requestedSeason;
@@ -235,7 +315,7 @@ class YoutubePlaylistImportPage extends Page implements HasForms
                 } else {
                     $this->season_year = null;
                 }
-            } else {
+            } elseif (blank($this->series_name)) {
                 $maxSeason = Episode::where('program_id', $this->program_id)
                     ->whereNotNull('season_number')
                     ->max('season_number');
@@ -253,16 +333,27 @@ class YoutubePlaylistImportPage extends Page implements HasForms
                 }
             }
 
-            $query = Episode::where('program_id', $this->program_id)->where('season_number', $this->season_number);
-            if ($this->season_year) {
-                $query->where('season_year', $this->season_year);
+            $query = Episode::where('program_id', $this->program_id);
+            if (filled($this->series_name)) {
+                $seriesModel = ProgramSeries::findSeries($this->program_id, null, $this->series_name);
+                if ($seriesModel) {
+                    $query->where('program_series_id', $seriesModel->id);
+                }
+            } else {
+                $query->where('season_number', $this->season_number);
+                if ($this->season_year) {
+                    $query->where('season_year', $this->season_year);
+                }
             }
+
             $maxEp = $query->max('episode_number');
             $this->start_episode_number = $maxEp !== null ? ($maxEp + 1) : 1;
 
-            $seasonPlaylistUrl = ProgramSeason::resolvePlaylistUrl($program, $this->season_number, $this->season_year);
-            if (filled($seasonPlaylistUrl)) {
-                $this->playlist_url = $seasonPlaylistUrl;
+            if (blank($this->playlist_url)) {
+                $seasonPlaylistUrl = ProgramSeason::resolvePlaylistUrl($program, $this->season_number, $this->season_year);
+                if (filled($seasonPlaylistUrl)) {
+                    $this->playlist_url = $seasonPlaylistUrl;
+                }
             }
         }
 
@@ -271,6 +362,7 @@ class YoutubePlaylistImportPage extends Page implements HasForms
             'playlist_url' => $this->playlist_url,
             'season_number' => $this->season_number,
             'season_year' => $this->season_year,
+            'series_name' => $this->series_name,
             'start_episode_number' => $this->start_episode_number ?? 1,
             'strip_program_name' => $this->strip_program_name,
         ]);
@@ -285,6 +377,7 @@ class YoutubePlaylistImportPage extends Page implements HasForms
 
         $this->season_number = (int) ($formData['season_number'] ?? 1);
         $this->season_year = filled($formData['season_year']) ? trim((string) $formData['season_year']) : null;
+        $this->series_name = filled($formData['series_name']) ? trim((string) $formData['series_name']) : null;
         $this->start_episode_number = (int) ($formData['start_episode_number'] ?? 1);
         $this->strip_program_name = (bool) ($formData['strip_program_name'] ?? false);
         $this->status = 'published';
@@ -332,13 +425,41 @@ class YoutubePlaylistImportPage extends Page implements HasForms
             return;
         }
 
-        // Mevcut YouTube videolarını DB'den sorgula (Video ID bazlı)
-        $existingUrls = Episode::pluck('youtube_url')->filter()->toArray();
-        $existingVideoIds = [];
-        foreach ($existingUrls as $url) {
+        // 1. Hedef grup bazlı mevcut videoları sorgula
+        $targetEpisodesQuery = Episode::where('program_id', $this->program_id);
+        if (filled($this->series_name)) {
+            $targetSeries = ProgramSeries::findSeries($this->program_id, null, $this->series_name);
+            if ($targetSeries) {
+                $targetEpisodesQuery->where('program_series_id', $targetSeries->id);
+            } else {
+                $targetEpisodesQuery->whereRaw('1 = 0');
+            }
+        } else {
+            $targetEpisodesQuery->where('season_number', $this->season_number);
+            if (filled($this->season_year)) {
+                $targetEpisodesQuery->where('season_year', $this->season_year);
+            } else {
+                $targetEpisodesQuery->whereNull('season_year');
+            }
+            $targetEpisodesQuery->whereNull('program_series_id');
+        }
+
+        $targetUrls = $targetEpisodesQuery->pluck('youtube_url')->filter()->toArray();
+        $targetVideoIds = [];
+        foreach ($targetUrls as $url) {
             $vId = Youtube::extractVideoId($url);
             if ($vId) {
-                $existingVideoIds[$vId] = true;
+                $targetVideoIds[$vId] = true;
+            }
+        }
+
+        // 2. Diğer tüm seriler/sezonlardaki videoları sorgula
+        $allUrls = Episode::pluck('youtube_url')->filter()->toArray();
+        $allVideoIds = [];
+        foreach ($allUrls as $url) {
+            $vId = Youtube::extractVideoId($url);
+            if ($vId) {
+                $allVideoIds[$vId] = true;
             }
         }
 
@@ -347,11 +468,13 @@ class YoutubePlaylistImportPage extends Page implements HasForms
 
         $previewItems = [];
         $newCount = 0;
-        $existingCount = 0;
+        $otherSeriesCount = 0;
+        $targetExistingCount = 0;
 
         foreach ($rawItems as $item) {
             $videoId = $item['video_id'];
-            $isDuplicate = isset($existingVideoIds[$videoId]);
+            $existsInTarget = isset($targetVideoIds[$videoId]);
+            $existsInOther = ! $existsInTarget && isset($allVideoIds[$videoId]);
 
             $displayTitle = $item['title'];
             if ($this->strip_program_name && filled($programName)) {
@@ -362,10 +485,18 @@ class YoutubePlaylistImportPage extends Page implements HasForms
                 }
             }
 
-            if ($isDuplicate) {
-                $existingCount++;
+            if ($existsInTarget) {
+                $targetExistingCount++;
+                $statusType = 'target_existing';
+                $statusLabel = 'Hedefte Mevcut';
+            } elseif ($existsInOther) {
+                $otherSeriesCount++;
+                $statusType = 'other_series';
+                $statusLabel = 'Başka Seride Mevcut';
             } else {
                 $newCount++;
+                $statusType = 'new';
+                $statusLabel = 'Yeni';
             }
 
             $previewItems[] = [
@@ -378,20 +509,36 @@ class YoutubePlaylistImportPage extends Page implements HasForms
                 'published_at_formatted' => $item['published_at'] ? date('d.m.Y', strtotime($item['published_at'])) : '-',
                 'position' => $item['position'],
                 'canonical_url' => $item['canonical_url'],
-                'is_duplicate' => $isDuplicate,
-                'status_label' => $isDuplicate ? 'Mevcut' : 'Yeni',
+                'exists_in_target' => $existsInTarget,
+                'exists_in_other' => $existsInOther,
+                'is_duplicate' => $existsInTarget,
+                'status_type' => $statusType,
+                'status_label' => $statusLabel,
             ];
         }
 
         $this->previewItems = $previewItems;
         $this->totalItemsCount = count($previewItems);
         $this->newItemsCount = $newCount;
-        $this->existingItemsCount = $existingCount;
+        $this->otherSeriesItemsCount = $otherSeriesCount;
+        $this->targetExistingItemsCount = $targetExistingCount;
+        $this->existingItemsCount = $targetExistingCount + $otherSeriesCount;
+        $this->willImportCount = $newCount + $otherSeriesCount;
         $this->isPreviewLoaded = true;
         $this->isImported = false;
 
+        $seriesText = filled($this->series_name) ? " (Alt Seri: {$this->series_name})" : '';
+        $msg = "Playlist kontrol edildi{$seriesText}: {$this->willImportCount} aktarılacak video";
+        if ($otherSeriesCount > 0) {
+            $msg .= " ({$otherSeriesCount} tanesi başka serilerde mevcut)";
+        }
+        if ($targetExistingCount > 0) {
+            $msg .= ", {$targetExistingCount} hedefte zaten mevcut";
+        }
+        $msg .= '.';
+
         Notification::make()
-            ->title("Playlist kontrol edildi: {$newCount} yeni video, {$existingCount} mevcut video.")
+            ->title($msg)
             ->info()
             ->send();
     }
@@ -407,9 +554,9 @@ class YoutubePlaylistImportPage extends Page implements HasForms
             return;
         }
 
-        if ($this->newItemsCount === 0) {
+        if ($this->willImportCount === 0) {
             Notification::make()
-                ->title('Aktarılacak yeni video bulunmamaktadır. Tüm videolar zaten eklenmiş.')
+                ->title('Aktarılacak yeni video bulunmamaktadır. Tüm videolar hedef grupta zaten mevcut.')
                 ->warning()
                 ->send();
 
@@ -422,24 +569,66 @@ class YoutubePlaylistImportPage extends Page implements HasForms
 
         try {
             DB::transaction(function () use (&$currentEpNumber, &$importedCount, &$skippedCount) {
+                $seasonRecord = null;
+                if ($this->program_id) {
+                    $seasonRecord = ProgramSeason::firstOrCreate([
+                        'program_id' => $this->program_id,
+                        'season_number' => $this->season_number,
+                        'season_year' => $this->season_year,
+                    ]);
+                }
+
+                $seriesRecord = null;
+                if (filled($this->series_name) && $this->program_id) {
+                    $seriesRecord = ProgramSeries::findOrCreateSeries(
+                        $this->program_id,
+                        $seasonRecord?->id,
+                        $this->series_name,
+                        $this->playlist_url
+                    );
+                    $seriesRecord->update([
+                        'youtube_playlist_url' => $this->playlist_url,
+                        'last_youtube_sync_at' => now(),
+                    ]);
+                } elseif (filled($this->playlist_url) && $seasonRecord) {
+                    $seasonRecord->update([
+                        'youtube_playlist_url' => $this->playlist_url,
+                        'last_youtube_sync_at' => now(),
+                    ]);
+                }
+
                 foreach ($this->previewItems as $item) {
-                    if ($item['is_duplicate']) {
+                    if (! empty($item['exists_in_target'])) {
                         $skippedCount++;
                         continue;
                     }
 
-                    // Dublikasyon çift kontrolü
                     $canonicalUrl = $item['canonical_url'];
                     $vId = $item['video_id'];
 
-                    $existsInDb = Episode::where('youtube_url', 'like', "%{$vId}%")->exists();
-                    if ($existsInDb) {
+                    // Scoped target duplicate check
+                    $targetDuplicateQuery = Episode::where('program_id', $this->program_id);
+                    if ($seriesRecord) {
+                        $targetDuplicateQuery->where('program_series_id', $seriesRecord->id);
+                    } else {
+                        $targetDuplicateQuery->where('season_number', $this->season_number);
+                        if (filled($this->season_year)) {
+                            $targetDuplicateQuery->where('season_year', $this->season_year);
+                        } else {
+                            $targetDuplicateQuery->whereNull('season_year');
+                        }
+                        $targetDuplicateQuery->whereNull('program_series_id');
+                    }
+
+                    $existsInTarget = $targetDuplicateQuery->where('youtube_url', 'like', "%{$vId}%")->exists();
+                    if ($existsInTarget) {
                         $skippedCount++;
                         continue;
                     }
 
                     Episode::create([
                         'program_id' => $this->program_id,
+                        'program_series_id' => $seriesRecord?->id,
                         'episode_number' => $currentEpNumber++,
                         'season_number' => $this->season_number,
                         'season_year' => $this->season_year,
@@ -457,20 +646,6 @@ class YoutubePlaylistImportPage extends Page implements HasForms
 
                     $importedCount++;
                 }
-
-                if (filled($this->playlist_url) && $this->program_id) {
-                    ProgramSeason::updateOrCreate(
-                        [
-                            'program_id' => $this->program_id,
-                            'season_number' => $this->season_number,
-                            'season_year' => $this->season_year,
-                        ],
-                        [
-                            'youtube_playlist_url' => $this->playlist_url,
-                            'last_youtube_sync_at' => now(),
-                        ]
-                    );
-                }
             });
         } catch (\Throwable $e) {
             Log::error("Bölüm toplu aktarım hatası: {$e->getMessage()}", ['exception' => $e]);
@@ -487,8 +662,9 @@ class YoutubePlaylistImportPage extends Page implements HasForms
         $this->isImported = true;
         $this->isPreviewLoaded = false;
 
+        $seriesMsg = filled($this->series_name) ? " [{$this->series_name}]" : '';
         Notification::make()
-            ->title("{$importedCount} bölüm başarıyla oluşturuldu. {$skippedCount} mevcut video atlandı.")
+            ->title("{$importedCount} bölüm{$seriesMsg} başarıyla oluşturuldu." . ($skippedCount > 0 ? " {$skippedCount} hedefte mevcut video atlandı." : ''))
             ->success()
             ->send();
     }

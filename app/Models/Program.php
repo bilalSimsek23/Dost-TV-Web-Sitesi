@@ -123,6 +123,11 @@ class Program extends Model
         return $this->hasMany(ProgramSeason::class);
     }
 
+    public function programSeries(): HasMany
+    {
+        return $this->hasMany(ProgramSeries::class);
+    }
+
     public function getSeasonPlaylistUrl(?int $seasonNumber = null, ?string $seasonYear = null): ?string
     {
         return ProgramSeason::resolvePlaylistUrl($this, $seasonNumber, $seasonYear);

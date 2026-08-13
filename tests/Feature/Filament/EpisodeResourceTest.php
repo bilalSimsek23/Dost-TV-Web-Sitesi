@@ -611,6 +611,365 @@ class EpisodeResourceTest extends TestCase
             ->assertActionExists('open_playlist_url')
             ->assertActionHasUrl('open_playlist_url', 'https://www.youtube.com/playlist?list=PL_HIKMET_S3_2019');
     }
+
+    public function test_delete_group_action_deletes_series_group_and_associated_episodes_without_affecting_other_series_or_program(): void
+    {
+        $program = Program::create([
+            'name' => 'Beraber Okuyalım Silme Testi',
+            'slug' => 'beraber-okuyalim-silme-testi',
+            'status' => 'active',
+        ]);
+
+        $season1 = \App\Models\ProgramSeason::create([
+            'program_id' => $program->id,
+            'season_number' => 1,
+            'season_year' => '2026',
+        ]);
+
+        $season2 = \App\Models\ProgramSeason::create([
+            'program_id' => $program->id,
+            'season_number' => 2,
+            'season_year' => '2026',
+        ]);
+
+        $seriesSozler = \App\Models\ProgramSeries::create([
+            'program_id' => $program->id,
+            'program_season_id' => $season1->id,
+            'name' => 'Sözler',
+            'slug' => 'sozler',
+        ]);
+
+        $series1to10 = \App\Models\ProgramSeries::create([
+            'program_id' => $program->id,
+            'program_season_id' => $season2->id,
+            'name' => '1-10. Söz',
+            'slug' => '1-10-soz',
+        ]);
+
+        for ($i = 1; $i <= 5; $i++) {
+            Episode::create([
+                'program_id' => $program->id,
+                'program_series_id' => $seriesSozler->id,
+                'season_number' => 1,
+                'season_year' => '2026',
+                'episode_number' => $i,
+                'title' => "Sözler {$i}",
+                'status' => 'published',
+            ]);
+        }
+
+        $epSeason2First = null;
+        for ($i = 1; $i <= 3; $i++) {
+            $ep = Episode::create([
+                'program_id' => $program->id,
+                'program_series_id' => $series1to10->id,
+                'season_number' => 2,
+                'season_year' => '2026',
+                'episode_number' => $i,
+                'title' => "1-10. Söz {$i}",
+                'status' => 'published',
+            ]);
+            if ($i === 1) {
+                $epSeason2First = $ep;
+            }
+        }
+
+        $this->assertEquals(8, Episode::where('program_id', $program->id)->count());
+
+        // Call delete_group on Season 2
+        Livewire::actingAs($this->admin)
+            ->test(ListEpisodes::class)
+            ->callTableAction('delete_group', $epSeason2First);
+
+        // 1. Season 2 episodes are deleted
+        $this->assertEquals(0, Episode::where('program_id', $program->id)->where('season_number', 2)->count());
+
+        // 2. ProgramSeries (1-10. Söz) is deleted
+        $this->assertNull(\App\Models\ProgramSeries::find($series1to10->id));
+
+        // 3. ProgramSeason (Season 2) is deleted
+        $this->assertNull(\App\Models\ProgramSeason::find($season2->id));
+
+        // 4. Season 1 episodes (5 episodes) are PRESERVED
+        $this->assertEquals(5, Episode::where('program_id', $program->id)->where('season_number', 1)->count());
+
+        // 5. ProgramSeries (Sözler) is PRESERVED
+        $this->assertNotNull(\App\Models\ProgramSeries::find($seriesSozler->id));
+
+        // 6. Program (Beraber Okuyalım) is PRESERVED
+        $this->assertNotNull(Program::find($program->id));
+    }
+
+    public function test_delete_group_action_deletes_non_series_season_group_without_affecting_other_seasons_or_program(): void
+    {
+        $program = Program::create([
+            'name' => 'Hikmet Arayışları Silme Testi',
+            'slug' => 'hikmet-arayislari-silme-testi',
+            'status' => 'active',
+        ]);
+
+        $season1 = \App\Models\ProgramSeason::create([
+            'program_id' => $program->id,
+            'season_number' => 1,
+            'season_year' => '2017',
+        ]);
+
+        $season2 = \App\Models\ProgramSeason::create([
+            'program_id' => $program->id,
+            'season_number' => 2,
+            'season_year' => '2018',
+        ]);
+
+        for ($i = 1; $i <= 5; $i++) {
+            Episode::create([
+                'program_id' => $program->id,
+                'season_number' => 1,
+                'season_year' => '2017',
+                'episode_number' => $i,
+                'title' => "Hikmet S1 E{$i}",
+                'status' => 'published',
+            ]);
+        }
+
+        $epSeason2 = null;
+        for ($i = 1; $i <= 10; $i++) {
+            $ep = Episode::create([
+                'program_id' => $program->id,
+                'season_number' => 2,
+                'season_year' => '2018',
+                'episode_number' => $i,
+                'title' => "Hikmet S2 E{$i}",
+                'status' => 'published',
+            ]);
+            if ($i === 1) {
+                $epSeason2 = $ep;
+            }
+        }
+
+        $this->assertEquals(15, Episode::where('program_id', $program->id)->count());
+
+        // Delete Season 2 group
+        Livewire::actingAs($this->admin)
+            ->test(ListEpisodes::class)
+            ->callTableAction('delete_group', $epSeason2);
+
+        // Season 2 episodes deleted
+        $this->assertEquals(0, Episode::where('program_id', $program->id)->where('season_number', 2)->count());
+        $this->assertNull(\App\Models\ProgramSeason::find($season2->id));
+
+        // Season 1 episodes and program preserved
+        $this->assertEquals(5, Episode::where('program_id', $program->id)->where('season_number', 1)->count());
+        $this->assertNotNull(\App\Models\ProgramSeason::find($season1->id));
+        $this->assertNotNull(Program::find($program->id));
+    }
+
+    public function test_delete_group_action_deletes_seasonless_group_and_preserves_program(): void
+    {
+        $program = Program::create([
+            'name' => 'Akla Kapı Sezonsuz Silme Testi',
+            'slug' => 'akla-kapi-sezonsuz-silme-testi',
+            'status' => 'active',
+        ]);
+
+        $ep1 = Episode::create([
+            'program_id' => $program->id,
+            'title' => 'Sezonsuz Bölüm 1',
+            'episode_number' => 1,
+            'status' => 'published',
+        ]);
+
+        Episode::create([
+            'program_id' => $program->id,
+            'title' => 'Sezonsuz Bölüm 2',
+            'episode_number' => 2,
+            'status' => 'published',
+        ]);
+
+        $this->assertEquals(2, Episode::where('program_id', $program->id)->count());
+
+        // Delete seasonless group
+        Livewire::actingAs($this->admin)
+            ->test(ListEpisodes::class)
+            ->callTableAction('delete_group', $ep1);
+
+        // Episodes deleted
+        $this->assertEquals(0, Episode::where('program_id', $program->id)->count());
+
+        // Program itself is NEVER deleted
+        $this->assertNotNull(Program::find($program->id));
+    }
+
+    public function test_edit_group_with_series_and_playlist_url(): void
+    {
+        $program = Program::create([
+            'name' => 'Beraber Okuyalım Edit Test',
+            'slug' => 'beraber-okuyalim-edit-test',
+            'status' => 'active',
+        ]);
+
+        $season = \App\Models\ProgramSeason::create([
+            'program_id' => $program->id,
+            'season_number' => 2,
+            'season_year' => null,
+        ]);
+
+        $series = \App\Models\ProgramSeries::create([
+            'program_id' => $program->id,
+            'program_season_id' => $season->id,
+            'name' => 'Lemalar',
+            'slug' => 'lemalar',
+            'youtube_playlist_url' => 'https://www.youtube.com/playlist?list=PLOLD_LEM',
+        ]);
+
+        $ep1 = Episode::create([
+            'program_id' => $program->id,
+            'program_series_id' => $series->id,
+            'season_number' => 2,
+            'episode_number' => 1,
+            'title' => 'Lemalar Bölüm 1',
+            'status' => 'published',
+        ]);
+
+        Episode::create([
+            'program_id' => $program->id,
+            'program_series_id' => $series->id,
+            'season_number' => 2,
+            'episode_number' => 2,
+            'title' => 'Lemalar Bölüm 2',
+            'status' => 'published',
+        ]);
+
+        // Edit group: rename series to "1-10. Söz" and update playlist URL
+        Livewire::actingAs($this->admin)
+            ->test(ListEpisodes::class)
+            ->callTableAction('edit_season', $ep1, [
+                'season_number' => 2,
+                'season_year' => null,
+                'series_name' => '1-10. Söz',
+                'youtube_playlist_url' => 'https://www.youtube.com/playlist?list=PLNEW_SOZ',
+            ])
+            ->assertHasNoTableActionErrors();
+
+        // Verify episodes are reassigned to the new series
+        $updatedEpisodes = Episode::where('program_id', $program->id)->get();
+        $this->assertCount(2, $updatedEpisodes);
+
+        $newSeries = \App\Models\ProgramSeries::where('program_id', $program->id)->where('name', '1-10. Söz')->first();
+        $this->assertNotNull($newSeries);
+        $this->assertEquals('https://www.youtube.com/playlist?list=PLNEW_SOZ', $newSeries->youtube_playlist_url);
+
+        foreach ($updatedEpisodes as $ep) {
+            $this->assertEquals(2, $ep->season_number);
+            $this->assertNull($ep->season_year);
+            $this->assertEquals($newSeries->id, $ep->program_series_id);
+        }
+
+        // Old unused series was cleaned up
+        $this->assertNull(\App\Models\ProgramSeries::find($series->id));
+    }
+
+    public function test_edit_group_without_year_and_without_series_like_akla_kapi(): void
+    {
+        $program = Program::create([
+            'name' => 'Akla Kapı Edit Test',
+            'slug' => 'akla-kapi-edit-test',
+            'status' => 'active',
+        ]);
+
+        $season = \App\Models\ProgramSeason::create([
+            'program_id' => $program->id,
+            'season_number' => 6,
+            'season_year' => null,
+            'youtube_playlist_url' => 'https://www.youtube.com/playlist?list=PLOLD_AKLA6',
+        ]);
+
+        $ep1 = Episode::create([
+            'program_id' => $program->id,
+            'season_number' => 6,
+            'season_year' => null,
+            'episode_number' => 1,
+            'title' => 'Akla Kapı Sezon 6 Bölüm 1',
+            'status' => 'published',
+        ]);
+
+        // Edit group: Keep season 6, year null, series null, update playlist URL
+        Livewire::actingAs($this->admin)
+            ->test(ListEpisodes::class)
+            ->callTableAction('edit_season', $ep1, [
+                'season_number' => 6,
+                'season_year' => null,
+                'series_name' => null,
+                'youtube_playlist_url' => 'https://www.youtube.com/playlist?list=PLNEW_AKLA6',
+            ])
+            ->assertHasNoTableActionErrors();
+
+        $freshEp = $ep1->fresh();
+        $this->assertEquals(6, $freshEp->season_number);
+        $this->assertNull($freshEp->season_year);
+        $this->assertNull($freshEp->program_series_id);
+
+        $freshSeason = $season->fresh();
+        $this->assertEquals('https://www.youtube.com/playlist?list=PLNEW_AKLA6', $freshSeason->youtube_playlist_url);
+    }
+
+    public function test_edit_group_prevents_conflict_with_existing_series_in_same_season(): void
+    {
+        $program = Program::create([
+            'name' => 'Beraber Okuyalım Çakışma Test',
+            'slug' => 'beraber-okuyalim-caxisma-test',
+            'status' => 'active',
+        ]);
+
+        $season = \App\Models\ProgramSeason::create([
+            'program_id' => $program->id,
+            'season_number' => 1,
+            'season_year' => null,
+        ]);
+
+        $series1 = \App\Models\ProgramSeries::create([
+            'program_id' => $program->id,
+            'program_season_id' => $season->id,
+            'name' => 'Lemalar',
+            'slug' => 'lemalar',
+        ]);
+
+        $series2 = \App\Models\ProgramSeries::create([
+            'program_id' => $program->id,
+            'program_season_id' => $season->id,
+            'name' => 'Sözler',
+            'slug' => 'sozler',
+        ]);
+
+        $epGroup1 = Episode::create([
+            'program_id' => $program->id,
+            'program_series_id' => $series1->id,
+            'season_number' => 1,
+            'episode_number' => 1,
+            'title' => 'Lemalar 1',
+            'status' => 'published',
+        ]);
+
+        Episode::create([
+            'program_id' => $program->id,
+            'program_series_id' => $series2->id,
+            'season_number' => 1,
+            'episode_number' => 1,
+            'title' => 'Sözler 1',
+            'status' => 'published',
+        ]);
+
+        // Attempt to rename Lemalar group to Sözler in Season 1
+        Livewire::actingAs($this->admin)
+            ->test(ListEpisodes::class)
+            ->callTableAction('edit_season', $epGroup1, [
+                'season_number' => 1,
+                'season_year' => null,
+                'series_name' => 'Sözler',
+            ]);
+
+        // Verify Group 1 was NOT merged or modified
+        $this->assertEquals($series1->id, $epGroup1->fresh()->program_series_id);
+    }
 }
 
 

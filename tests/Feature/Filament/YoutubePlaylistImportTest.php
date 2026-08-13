@@ -187,9 +187,10 @@ class YoutubePlaylistImportTest extends TestCase
 
     public function test_duplicate_youtube_videos_are_skipped(): void
     {
-        // Existing episode in DB
+        // Existing episode in DB in Season 1
         Episode::create([
             'program_id' => $this->program->id,
+            'season_number' => 1,
             'episode_number' => 1,
             'title' => 'Mevcut Bölüm',
             'video_source' => 'youtube',
@@ -221,6 +222,7 @@ class YoutubePlaylistImportTest extends TestCase
         Livewire::actingAs($this->admin)
             ->test(YoutubePlaylistImportPage::class)
             ->set('data.program_id', $this->program->id)
+            ->set('data.season_number', 1)
             ->set('data.playlist_url', 'https://www.youtube.com/playlist?list=PLTEST123')
             ->call('fetchPreview')
             ->assertSet('newItemsCount', 1)

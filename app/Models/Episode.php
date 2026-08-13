@@ -14,6 +14,7 @@ class Episode extends Model
 
     protected $fillable = [
         'program_id',
+        'program_series_id',
         'episode_number',
         'season_number',
         'season_year',
@@ -50,6 +51,7 @@ class Episode extends Model
         'episode_number' => 'integer',
         'season_number' => 'integer',
         'season_year' => 'string',
+        'program_series_id' => 'integer',
     ];
 
 
@@ -104,8 +106,30 @@ class Episode extends Model
         return $this->belongsTo(Program::class);
     }
 
+    public function programSeries(): BelongsTo
+    {
+        return $this->belongsTo(ProgramSeries::class, 'program_series_id');
+    }
+
     public function getYoutubeEmbedUrlAttribute(): ?string
     {
         return Youtube::embedUrl($this->youtube_url);
+    }
+
+    public function getThumbnailUrlAttribute(): ?string
+    {
+        if (filled($this->thumbnail)) {
+            if (str_starts_with($this->thumbnail, 'http://') || str_starts_with($this->thumbnail, 'https://')) {
+                return $this->thumbnail;
+            }
+
+            return asset('storage/' . $this->thumbnail);
+        }
+
+        if ($this->video_source === 'youtube' && filled($this->youtube_url)) {
+            return Youtube::thumbnailUrl($this->youtube_url);
+        }
+
+        return null;
     }
 }
