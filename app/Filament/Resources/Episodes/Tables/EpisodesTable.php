@@ -86,7 +86,8 @@ class EpisodesTable
                     ->label('Playlist')
                     ->badge()
                     ->state(function (Episode $record) {
-                        if (filled($record->program?->youtube_playlist_url)) {
+                        $playlistUrl = \App\Models\ProgramSeason::resolvePlaylistUrl($record->program, $record->season_number, $record->season_year);
+                        if (filled($playlistUrl)) {
                             return 'Playlist Bağlı';
                         }
                         if (($record->youtube_episodes_count ?? 0) > 0) {
@@ -95,7 +96,8 @@ class EpisodesTable
                         return 'Playlist Yok';
                     })
                     ->color(function (Episode $record) {
-                        if (filled($record->program?->youtube_playlist_url)) {
+                        $playlistUrl = \App\Models\ProgramSeason::resolvePlaylistUrl($record->program, $record->season_number, $record->season_year);
+                        if (filled($playlistUrl)) {
                             return 'success';
                         }
                         if (($record->youtube_episodes_count ?? 0) > 0) {
@@ -137,13 +139,14 @@ class EpisodesTable
 
                         TextInput::make('season_year')
                             ->label('Sezon Yılı')
-                            ->numeric()
-                            ->minValue(1900)
-                            ->maxValue(2100)
                             ->nullable()
                             ->default(fn (Episode $record) => $record->season_year)
-                            ->placeholder('Örn: 2017')
-                            ->helperText('Opsiyonel (Örn: 2017)'),
+                            ->placeholder('Örn: 2017 veya 2022-2023')
+                            ->helperText('Opsiyonel (Örn: 2017 veya 2022-2023)')
+                            ->regex('/^\d{4}(-\d{4})?$/')
+                            ->validationMessages([
+                                'regex' => 'Sezon yılı YYYY (örn: 2017) veya YYYY-YYYY (örn: 2022-2023) formatında olmalıdır.',
+                            ]),
                     ])
                     ->fillForm(fn (Episode $record): array => [
                         'program_name' => $record->program?->name,
@@ -153,10 +156,10 @@ class EpisodesTable
                     ->action(function (Episode $record, array $data) {
                         $oldProgramId = (int) $record->program_id;
                         $oldSeasonNumber = $record->season_number !== null ? (int) $record->season_number : null;
-                        $oldSeasonYear = $record->season_year !== null ? (int) $record->season_year : null;
+                        $oldSeasonYear = filled($record->season_year) ? (string) $record->season_year : null;
 
                         $newSeasonNumber = filled($data['season_number']) ? (int) $data['season_number'] : null;
-                        $newSeasonYear = filled($data['season_year']) ? (int) $data['season_year'] : null;
+                        $newSeasonYear = filled($data['season_year']) ? trim((string) $data['season_year']) : null;
 
                         // If no changes, return early
                         if ($oldSeasonNumber === $newSeasonNumber && $oldSeasonYear === $newSeasonYear) {
@@ -233,6 +236,14 @@ class EpisodesTable
                                     'season_number' => $newSeasonNumber,
                                     'season_year' => $newSeasonYear,
                                 ]);
+
+                                $existingSeason = \App\Models\ProgramSeason::findSeason($oldProgramId, $oldSeasonNumber, $oldSeasonYear);
+                                if ($existingSeason) {
+                                    $existingSeason->update([
+                                        'season_number' => $newSeasonNumber,
+                                        'season_year' => $newSeasonYear,
+                                    ]);
+                                }
                             });
 
                             Notification::make()
@@ -246,6 +257,7 @@ class EpisodesTable
                                 ->send();
                         }
                     }),
+
 
                 Action::make('manage')
                     ->label('Yönet')
@@ -277,10 +289,11 @@ class EpisodesTable
                 }
 
                 if (filled($seasonYearParam) && $seasonYearParam !== 'none') {
-                    $query->where('season_year', (int) $seasonYearParam);
+                    $query->where('season_year', (string) $seasonYearParam);
                 } elseif ($seasonYearParam === 'none') {
                     $query->whereNull('season_year');
                 }
+
 
                 return $query
                     ->orderByRaw('CASE WHEN episode_number IS NULL THEN 1 ELSE 0 END')

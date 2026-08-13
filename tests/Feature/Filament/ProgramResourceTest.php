@@ -405,4 +405,87 @@ class ProgramResourceTest extends TestCase
             'episode_number' => 5,
         ]);
     }
+
+    public function test_preview_action_generates_correct_public_url(): void
+    {
+        $hikmet = Program::create([
+            'name' => 'Hikmet Arayışları',
+            'slug' => 'hikmet-arayislari',
+            'status' => 'active',
+            'is_active' => true,
+            'show_on_public' => true,
+        ]);
+
+        $akla = Program::create([
+            'name' => 'Akla Kapı',
+            'slug' => 'akla-kapi',
+            'status' => 'active',
+            'is_active' => true,
+            'show_on_public' => true,
+        ]);
+
+        $this->assertEquals('/programlar/hikmet-arayislari', parse_url(route('programs.show', $hikmet), PHP_URL_PATH));
+        $this->assertEquals('/programlar/akla-kapi', parse_url(route('programs.show', $akla), PHP_URL_PATH));
+
+        $this->get(route('programs.show', $hikmet))->assertOk();
+        $this->get(route('programs.show', $akla))->assertOk();
+
+        Livewire::actingAs($this->admin)
+            ->test(ListPrograms::class)
+            ->assertTableActionExists('preview');
+    }
+
+    public function test_searching_programs_preserves_valid_edit_record_url(): void
+    {
+        $akla = Program::create([
+            'name' => 'Akla Kapı',
+            'slug' => 'akla-kapi',
+            'status' => 'active',
+            'is_active' => true,
+            'show_on_public' => true,
+        ]);
+
+        $hikmet = Program::create([
+            'name' => 'Hikmet Arayışları',
+            'slug' => 'hikmet-arayislari',
+            'status' => 'active',
+            'is_active' => true,
+            'show_on_public' => true,
+        ]);
+
+        Livewire::actingAs($this->admin)
+            ->test(ListPrograms::class)
+            ->set('tableSearch', 'akla')
+            ->assertCanSeeTableRecords([$akla])
+            ->assertCanNotSeeTableRecords([$hikmet])
+            ->assertTableActionExists('edit', record: $akla);
+
+        Livewire::actingAs($this->admin)
+            ->test(ListPrograms::class)
+            ->set('tableSearch', 'hikmet')
+            ->assertCanSeeTableRecords([$hikmet])
+            ->assertCanNotSeeTableRecords([$akla])
+            ->assertTableActionExists('edit', record: $hikmet);
+
+
+        // Verify both ID and slug access to edit page succeed
+        $this->actingAs($this->admin)
+            ->get(ProgramResource::getUrl('edit', ['record' => $akla->id]))
+            ->assertOk();
+
+        $this->actingAs($this->admin)
+            ->get(ProgramResource::getUrl('edit', ['record' => $akla->slug]))
+            ->assertOk();
+
+        $this->actingAs($this->admin)
+            ->get("/admin/programs/{$hikmet->id}/edit")
+            ->assertOk();
+
+        $this->actingAs($this->admin)
+            ->get("/admin/programs/{$hikmet->slug}/edit")
+            ->assertOk();
+    }
 }
+
+
+

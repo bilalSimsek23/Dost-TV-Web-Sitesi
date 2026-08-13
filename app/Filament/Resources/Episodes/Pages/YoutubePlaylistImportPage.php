@@ -5,6 +5,7 @@ namespace App\Filament\Resources\Episodes\Pages;
 use App\Filament\Resources\Episodes\EpisodeResource;
 use App\Models\Episode;
 use App\Models\Program;
+use App\Models\ProgramSeason;
 use App\Services\YouTube\YouTubePlaylistImportService;
 use App\Support\Youtube;
 use Filament\Forms\Components\Checkbox;
@@ -30,15 +31,13 @@ class YoutubePlaylistImportPage extends Page implements HasForms
 
     protected string $view = 'filament.resources.episodes.pages.youtube-playlist-import-page';
 
-    public ?array $data = [];
-
-    public ?int $program_id = null;
+    public ?array $data = [];    public ?int $program_id = null;
 
     public ?string $playlist_url = '';
 
     public int $season_number = 1;
 
-    public ?int $season_year = null;
+    public ?string $season_year = null;
 
     public ?int $start_episode_number = 1;
 
@@ -85,12 +84,40 @@ class YoutubePlaylistImportPage extends Page implements HasForms
                         $this->previewItems = [];
                         if ($this->program_id) {
                             $program = Program::find($this->program_id);
-                            if ($program && filled($program->youtube_playlist_url) && blank($get('playlist_url'))) {
-                                $set('playlist_url', $program->youtube_playlist_url);
-                                $this->playlist_url = $program->youtube_playlist_url;
+
+                            // Smart season and year suggestion
+                            $maxSeason = Episode::where('program_id', $this->program_id)
+                                ->whereNotNull('season_number')
+                                ->max('season_number');
+
+                            if ($maxSeason !== null) {
+                                $suggestedSeason = (int) $maxSeason + 1;
+                                $lastSeasonYear = Episode::where('program_id', $this->program_id)
+                                    ->where('season_number', $maxSeason)
+                                    ->whereNotNull('season_year')
+                                    ->value('season_year');
+                                $suggestedYear = static::suggestNextSeasonYear($lastSeasonYear);
+                            } else {
+                                $suggestedSeason = 1;
+                                $suggestedYear = null;
                             }
-                            $this->calculateStartEpisodeNumber($get, $set);
+
+                            $set('season_number', $suggestedSeason);
+                            $set('season_year', $suggestedYear);
+                            $this->season_number = $suggestedSeason;
+                            $this->season_year = $suggestedYear;
+
+                            // Resolve season-level playlist URL if exists, fallback to program-level
+                            $seasonPlaylistUrl = ProgramSeason::resolvePlaylistUrl($program, $suggestedSeason, $suggestedYear);
+                            if (filled($seasonPlaylistUrl) && blank($get('playlist_url'))) {
+                                $set('playlist_url', $seasonPlaylistUrl);
+                                $this->playlist_url = $seasonPlaylistUrl;
+                            }
+
+                            $this->calculateStartEpisodeNumber($get, $set, $suggestedSeason, $suggestedYear);
                         } else {
+                            $set('season_number', 1);
+                            $set('season_year', null);
                             $set('start_episode_number', 1);
                         }
                     }),
@@ -108,19 +135,29 @@ class YoutubePlaylistImportPage extends Page implements HasForms
                     ->live()
                     ->afterStateUpdated(function ($state, $set, $get) {
                         $this->season_number = (int) ($state ?? 1);
+                        if ($this->program_id) {
+                            $program = Program::find($this->program_id);
+                            $seasonPlaylistUrl = ProgramSeason::resolvePlaylistUrl($program, $this->season_number, $this->season_year);
+                            if (filled($seasonPlaylistUrl)) {
+                                $set('playlist_url', $seasonPlaylistUrl);
+                                $this->playlist_url = $seasonPlaylistUrl;
+                            }
+                        }
                         $this->calculateStartEpisodeNumber($get, $set);
                     }),
 
+
                 TextInput::make('season_year')
                     ->label('Sezon Yılı')
-                    ->numeric()
-                    ->minValue(1900)
-                    ->maxValue(2100)
-                    ->placeholder('Örn: 2017')
-                    ->helperText('Opsiyonel (Örn: 2017)')
+                    ->placeholder('Örn: 2017 veya 2022-2023')
+                    ->helperText('Opsiyonel (Örn: 2017 veya 2022-2023)')
+                    ->regex('/^\d{4}(-\d{4})?$/')
+                    ->validationMessages([
+                        'regex' => 'Sezon yılı YYYY (örn: 2017) veya YYYY-YYYY (örn: 2022-2023) formatında olmalıdır.',
+                    ])
                     ->live()
                     ->afterStateUpdated(function ($state, $set, $get) {
-                        $this->season_year = $state ? (int) $state : null;
+                        $this->season_year = filled($state) ? trim((string) $state) : null;
                         $this->calculateStartEpisodeNumber($get, $set);
                     }),
 
@@ -137,23 +174,44 @@ class YoutubePlaylistImportPage extends Page implements HasForms
             ->statePath('data');
     }
 
-    public function calculateStartEpisodeNumber($get, $set): void
+    public static function suggestNextSeasonYear(?string $lastSeasonYear): ?string
     {
-        $pId = $get('program_id');
-        $sNum = (int) ($get('season_number') ?? 1);
-        $sYear = $get('season_year') ? (int) $get('season_year') : null;
+        if (blank($lastSeasonYear)) {
+            return null;
+        }
+
+        $lastSeasonYear = trim($lastSeasonYear);
+
+        if (preg_match('/^(\d{4})-(\d{4})$/', $lastSeasonYear, $matches)) {
+            $start = (int) $matches[1] + 1;
+            $end = (int) $matches[2] + 1;
+            return "{$start}-{$end}";
+        }
+
+        if (preg_match('/^(\d{4})$/', $lastSeasonYear, $matches)) {
+            return (string) ((int) $matches[1] + 1);
+        }
+
+        return null;
+    }
+
+    public function calculateStartEpisodeNumber($get, $set, ?int $explicitSeason = null, ?string $explicitYear = null): void
+    {
+        $pId = $get('program_id') ?? $this->program_id;
+        $sNum = $explicitSeason !== null ? $explicitSeason : (int) ($get('season_number') ?? $this->season_number ?? 1);
+        $sYear = $explicitYear !== null ? $explicitYear : (filled($get('season_year')) ? trim((string) $get('season_year')) : ($this->season_year ?? null));
 
         if ($pId) {
             $query = Episode::where('program_id', (int) $pId)->where('season_number', $sNum);
             if ($sYear) {
                 $query->where('season_year', $sYear);
             }
-            $maxEp = $query->max('episode_number')
-                ?? Episode::where('program_id', (int) $pId)->max('episode_number')
-                ?? 0;
-            $set('start_episode_number', $maxEp + 1);
+            $maxEp = $query->max('episode_number');
+            $set('start_episode_number', $maxEp !== null ? ($maxEp + 1) : 1);
+            $this->start_episode_number = $maxEp !== null ? ($maxEp + 1) : 1;
         } else {
             $set('start_episode_number', 1);
+            $this->start_episode_number = 1;
         }
     }
 
@@ -168,23 +226,44 @@ class YoutubePlaylistImportPage extends Page implements HasForms
             }
 
             $requestedSeason = request()->query('season_number');
+            $requestedYear = request()->query('season_year');
+
             if (filled($requestedSeason) && $requestedSeason !== 'none') {
                 $this->season_number = (int) $requestedSeason;
-            }
+                if (filled($requestedYear) && $requestedYear !== 'none') {
+                    $this->season_year = trim((string) $requestedYear);
+                } else {
+                    $this->season_year = null;
+                }
+            } else {
+                $maxSeason = Episode::where('program_id', $this->program_id)
+                    ->whereNotNull('season_number')
+                    ->max('season_number');
 
-            $requestedYear = request()->query('season_year');
-            if (filled($requestedYear) && $requestedYear !== 'none') {
-                $this->season_year = (int) $requestedYear;
+                if ($maxSeason !== null) {
+                    $this->season_number = (int) $maxSeason + 1;
+                    $lastSeasonYear = Episode::where('program_id', $this->program_id)
+                        ->where('season_number', $maxSeason)
+                        ->whereNotNull('season_year')
+                        ->value('season_year');
+                    $this->season_year = static::suggestNextSeasonYear($lastSeasonYear);
+                } else {
+                    $this->season_number = 1;
+                    $this->season_year = null;
+                }
             }
 
             $query = Episode::where('program_id', $this->program_id)->where('season_number', $this->season_number);
             if ($this->season_year) {
                 $query->where('season_year', $this->season_year);
             }
-            $maxEp = $query->max('episode_number')
-                ?? Episode::where('program_id', $this->program_id)->max('episode_number')
-                ?? 0;
-            $this->start_episode_number = $maxEp + 1;
+            $maxEp = $query->max('episode_number');
+            $this->start_episode_number = $maxEp !== null ? ($maxEp + 1) : 1;
+
+            $seasonPlaylistUrl = ProgramSeason::resolvePlaylistUrl($program, $this->season_number, $this->season_year);
+            if (filled($seasonPlaylistUrl)) {
+                $this->playlist_url = $seasonPlaylistUrl;
+            }
         }
 
         $this->form->fill([
@@ -205,6 +284,7 @@ class YoutubePlaylistImportPage extends Page implements HasForms
         $this->playlist_url = ! empty($formData['playlist_url']) ? $formData['playlist_url'] : ($this->playlist_url ?? '');
 
         $this->season_number = (int) ($formData['season_number'] ?? 1);
+        $this->season_year = filled($formData['season_year']) ? trim((string) $formData['season_year']) : null;
         $this->start_episode_number = (int) ($formData['start_episode_number'] ?? 1);
         $this->strip_program_name = (bool) ($formData['strip_program_name'] ?? false);
         $this->status = 'published';
@@ -229,28 +309,13 @@ class YoutubePlaylistImportPage extends Page implements HasForms
             return;
         }
 
-        $service = app(YouTubePlaylistImportService::class);
-
         try {
+            $service = app(YouTubePlaylistImportService::class);
             $result = $service->fetchPlaylistItems($this->playlist_url);
-        } catch (\InvalidArgumentException $e) {
-            Notification::make()
-                ->title($e->getMessage())
-                ->warning()
-                ->send();
-
-            return;
-        } catch (\RuntimeException $e) {
-            Notification::make()
-                ->title($e->getMessage())
-                ->danger()
-                ->send();
-
-            return;
         } catch (\Throwable $e) {
-            Log::error("YouTube Playlist Önizleme Hatası: {$e->getMessage()}", ['exception' => $e]);
             Notification::make()
-                ->title('YouTube playlist verisi çekilirken beklenmeyen bir hata oluştu.')
+                ->title('YouTube Playlist Çekilemedi')
+                ->body($e->getMessage())
                 ->danger()
                 ->send();
 
@@ -391,6 +456,20 @@ class YoutubePlaylistImportPage extends Page implements HasForms
                     ]);
 
                     $importedCount++;
+                }
+
+                if (filled($this->playlist_url) && $this->program_id) {
+                    ProgramSeason::updateOrCreate(
+                        [
+                            'program_id' => $this->program_id,
+                            'season_number' => $this->season_number,
+                            'season_year' => $this->season_year,
+                        ],
+                        [
+                            'youtube_playlist_url' => $this->playlist_url,
+                            'last_youtube_sync_at' => now(),
+                        ]
+                    );
                 }
             });
         } catch (\Throwable $e) {

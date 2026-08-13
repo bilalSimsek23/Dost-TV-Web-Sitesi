@@ -76,7 +76,8 @@ class ProgramsRelationManager extends RelationManager
                     ->label('Programa Git')
                     ->icon('heroicon-o-arrow-top-right-on-square')
                     ->color('info')
-                    ->url(fn (Program $record) => url("/admin/programs/{$record->id}/edit")),
+                    ->url(fn (Program $record) => \App\Filament\Resources\Programs\ProgramResource::getUrl('edit', ['record' => $record])),
+
 
                 DetachAction::make()
                     ->label('Kategoriden Çıkar')

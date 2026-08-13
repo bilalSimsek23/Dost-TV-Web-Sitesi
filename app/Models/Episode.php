@@ -49,8 +49,9 @@ class Episode extends Model
         'show_on_public' => 'boolean',
         'episode_number' => 'integer',
         'season_number' => 'integer',
-        'season_year' => 'integer',
+        'season_year' => 'string',
     ];
+
 
     public const STATUSES = [
         'draft' => 'Taslak',

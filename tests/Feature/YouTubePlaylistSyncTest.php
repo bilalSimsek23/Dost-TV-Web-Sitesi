@@ -549,4 +549,80 @@ class YouTubePlaylistSyncTest extends TestCase
         $this->assertTrue($fresh->is_active);
         $this->assertEquals(5, $fresh->sort_order);
     }
+
+    public function test_sync_multiple_seasons_of_same_program_each_with_own_playlist(): void
+    {
+        $hikmet = Program::create([
+            'name' => 'Hikmet Arayışları',
+            'slug' => 'hikmet-arayislari',
+            'status' => 'active',
+        ]);
+
+        $s1 = \App\Models\ProgramSeason::create([
+            'program_id' => $hikmet->id,
+            'season_number' => 1,
+            'season_year' => '2017',
+            'youtube_playlist_url' => 'https://www.youtube.com/playlist?list=PL_HIKMET_S1',
+        ]);
+
+        $s2 = \App\Models\ProgramSeason::create([
+            'program_id' => $hikmet->id,
+            'season_number' => 2,
+            'season_year' => '2018',
+            'youtube_playlist_url' => 'https://www.youtube.com/playlist?list=PL_HIKMET_S2',
+        ]);
+
+        $s3 = \App\Models\ProgramSeason::create([
+            'program_id' => $hikmet->id,
+            'season_number' => 3,
+            'season_year' => '2019',
+            'youtube_playlist_url' => 'https://www.youtube.com/playlist?list=PL_HIKMET_S3',
+        ]);
+
+        // Pre-existing episode in Season 1
+        $epS1 = Episode::create([
+            'program_id' => $hikmet->id,
+            'season_number' => 1,
+            'season_year' => '2017',
+            'episode_number' => 1,
+            'title' => 'S1 Bölüm 1',
+            'youtube_url' => 'https://www.youtube.com/watch?v=S1_VID_1',
+            'status' => 'published',
+        ]);
+
+        Http::fake([
+            'https://www.googleapis.com/youtube/v3/playlistItems*playlistId=PL_HIKMET_S3*' => Http::response([
+                'items' => [
+                    [
+                        'snippet' => [
+                            'resourceId' => ['videoId' => 'S3_VID_NEW'],
+                            'title' => 'Hikmet Arayışları S3 Yeni Video',
+                            'description' => 'S3 açıklama',
+                            'publishedAt' => '2026-08-10T10:00:00Z',
+                            'position' => 0,
+                        ],
+                    ],
+                ],
+            ], 200),
+        ]);
+
+        $service = new YouTubePlaylistSyncService();
+        $res = $service->syncSeason($s3);
+
+        $this->assertTrue($res['success']);
+        $this->assertEquals(1, $res['new_videos']);
+
+        $createdEp = Episode::where('youtube_url', 'like', '%S3_VID_NEW%')->first();
+        $this->assertNotNull($createdEp);
+        $this->assertEquals($hikmet->id, $createdEp->program_id);
+        $this->assertEquals(3, $createdEp->season_number);
+        $this->assertEquals('2019', $createdEp->season_year);
+        $this->assertEquals(1, $createdEp->episode_number);
+
+        // Verify Season 1 episode was completely untouched
+        $this->assertEquals(1, $epS1->fresh()->episode_number);
+        $this->assertEquals('2017', $epS1->fresh()->season_year);
+        $this->assertEquals(1, $epS1->fresh()->season_number);
+    }
 }
+

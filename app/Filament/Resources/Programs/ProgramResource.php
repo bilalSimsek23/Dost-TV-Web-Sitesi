@@ -43,6 +43,23 @@ class ProgramResource extends Resource
         ];
     }
 
+    public static function resolveRecordRouteBinding(int | string $key, ?\Closure $modifyQuery = null): ?\Illuminate\Database\Eloquent\Model
+    {
+        $query = static::getModel()::query();
+
+        if ($modifyQuery) {
+            $query = $modifyQuery($query) ?? $query;
+        }
+
+        return $query
+            ->where(function ($q) use ($key) {
+                $q->where('id', $key)
+                  ->orWhere('slug', $key);
+            })
+            ->first();
+    }
+
+
     public static function getPages(): array
     {
         return [
@@ -52,3 +69,4 @@ class ProgramResource extends Resource
         ];
     }
 }
+

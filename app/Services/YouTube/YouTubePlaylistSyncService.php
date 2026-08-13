@@ -4,6 +4,7 @@ namespace App\Services\YouTube;
 
 use App\Models\Episode;
 use App\Models\Program;
+use App\Models\ProgramSeason;
 use App\Models\YoutubeSyncLog;
 use App\Support\Youtube;
 use Illuminate\Support\Facades\Log;
@@ -19,17 +20,20 @@ class YouTubePlaylistSyncService
     }
 
     /**
-     * Synchronize a single program's YouTube playlist.
-     * If $updateExistingMetadata is true, metadata of existing videos (title, description, thumbnail, aired_at, youtube_url)
-     * is updated if changed, while preserving episode_number, season_number, slug, status, show_on_public, is_active, sort_order.
+     * Synchronize a specific ProgramSeason's YouTube playlist.
      */
-    public function syncProgramPlaylist(Program $program, bool $dryRun = false, bool $updateExistingMetadata = false): array
+    public function syncSeason(ProgramSeason $season, bool $dryRun = false, bool $updateExistingMetadata = false): array
     {
-        if (blank($program->youtube_playlist_url)) {
+        $program = $season->program;
+        $playlistUrl = $season->youtube_playlist_url;
+
+        if (blank($playlistUrl)) {
             return [
                 'success' => true,
-                'program_id' => $program->id,
-                'program_name' => $program->name,
+                'program_id' => $season->program_id,
+                'program_name' => $program?->name ?? 'Program',
+                'season_number' => $season->season_number,
+                'season_year' => $season->season_year,
                 'total_items' => 0,
                 'new_videos' => 0,
                 'created_episodes' => 0,
@@ -38,7 +42,7 @@ class YouTubePlaylistSyncService
                 'skipped_existing' => 0,
                 'errors' => 0,
                 'dry_run' => $dryRun,
-                'message' => 'Bu programa ait bir YouTube Playlist URL tanımlanmamış.',
+                'message' => 'Bu sezona ait bir YouTube Playlist URL tanımlanmamış.',
                 'items' => [],
             ];
         }
@@ -46,17 +50,17 @@ class YouTubePlaylistSyncService
         $startedAt = now();
 
         try {
-            $result = $this->importService->fetchPlaylistItems($program->youtube_playlist_url);
+            $result = $this->importService->fetchPlaylistItems($playlistUrl);
         } catch (\Throwable $e) {
-            Log::error("YouTube Playlist Sync Error for Program {$program->id} ({$program->name}): {$e->getMessage()}", [
+            Log::error("YouTube Playlist Sync Error for Program {$season->program_id} Season {$season->season_number}: {$e->getMessage()}", [
                 'exception' => $e,
-                'playlist_url' => $program->youtube_playlist_url,
+                'playlist_url' => $playlistUrl,
             ]);
 
             if (! $dryRun) {
                 YoutubeSyncLog::create([
-                    'program_id' => $program->id,
-                    'playlist_url' => $program->youtube_playlist_url,
+                    'program_id' => $season->program_id,
+                    'playlist_url' => $playlistUrl,
                     'status' => 'failed',
                     'error_message' => $e->getMessage(),
                     'started_at' => $startedAt,
@@ -66,9 +70,11 @@ class YouTubePlaylistSyncService
 
             return [
                 'success' => false,
-                'program_id' => $program->id,
-                'program_name' => $program->name,
-                'playlist_url' => $program->youtube_playlist_url,
+                'program_id' => $season->program_id,
+                'program_name' => $program?->name ?? 'Program',
+                'season_number' => $season->season_number,
+                'season_year' => $season->season_year,
+                'playlist_url' => $playlistUrl,
                 'total_items' => 0,
                 'new_videos' => 0,
                 'created_episodes' => 0,
@@ -85,11 +91,14 @@ class YouTubePlaylistSyncService
         $rawItems = $result['items'] ?? [];
         if (empty($rawItems)) {
             if (! $dryRun) {
-                $program->update(['last_youtube_sync_at' => now()]);
+                $season->update(['last_youtube_sync_at' => now()]);
+                if ($program) {
+                    $program->update(['last_youtube_sync_at' => now()]);
+                }
 
                 YoutubeSyncLog::create([
-                    'program_id' => $program->id,
-                    'playlist_url' => $program->youtube_playlist_url,
+                    'program_id' => $season->program_id,
+                    'playlist_url' => $playlistUrl,
                     'status' => 'success',
                     'checked_videos' => 0,
                     'new_videos' => 0,
@@ -102,9 +111,11 @@ class YouTubePlaylistSyncService
 
             return [
                 'success' => true,
-                'program_id' => $program->id,
-                'program_name' => $program->name,
-                'playlist_url' => $program->youtube_playlist_url,
+                'program_id' => $season->program_id,
+                'program_name' => $program?->name ?? 'Program',
+                'season_number' => $season->season_number,
+                'season_year' => $season->season_year,
+                'playlist_url' => $playlistUrl,
                 'total_items' => 0,
                 'new_videos' => 0,
                 'created_episodes' => 0,
@@ -118,7 +129,7 @@ class YouTubePlaylistSyncService
             ];
         }
 
-        // Ensure items are sorted chronologically by published_at ASC (Oldest -> Newest)
+        // Sort chronologically published_at ASC (Oldest -> Newest)
         usort($rawItems, function ($a, $b) {
             $timeA = ! empty($a['published_at']) ? strtotime($a['published_at']) : 0;
             $timeB = ! empty($b['published_at']) ? strtotime($b['published_at']) : 0;
@@ -128,7 +139,7 @@ class YouTubePlaylistSyncService
             return $timeA <=> $timeB;
         });
 
-        // Fetch all existing episode youtube_urls from DB in bulk
+        // Fetch existing episode URLs
         $existingUrls = Episode::pluck('youtube_url')->filter()->toArray();
         $existingVideoIds = [];
         foreach ($existingUrls as $url) {
@@ -138,7 +149,41 @@ class YouTubePlaylistSyncService
             }
         }
 
-        $maxEpisodeNum = Episode::where('program_id', $program->id)->max('episode_number') ?? 0;
+        // Calculate max episode number in this season
+        $seasonEpisodesQuery = Episode::where('program_id', $season->program_id);
+        if ($season->season_number !== null) {
+            $hasSeasonEpisodes = Episode::where('program_id', $season->program_id)
+                ->where('season_number', $season->season_number)
+                ->exists();
+
+            if ($hasSeasonEpisodes) {
+                $seasonEpisodesQuery->where('season_number', $season->season_number);
+                if (filled($season->season_year)) {
+                    $seasonEpisodesQuery->where('season_year', $season->season_year);
+                }
+            } else {
+                $otherSeasonsExist = Episode::where('program_id', $season->program_id)
+                    ->whereNotNull('season_number')
+                    ->where('season_number', '!=', $season->season_number)
+                    ->exists();
+
+                if ($otherSeasonsExist || (int) $season->season_number > 1) {
+                    $seasonEpisodesQuery->where('season_number', $season->season_number);
+                } else {
+                    $seasonEpisodesQuery->where(function ($q) use ($season) {
+                        $q->where('season_number', $season->season_number)
+                            ->orWhereNull('season_number');
+                    });
+                }
+            }
+        } else {
+            $seasonEpisodesQuery->whereNull('season_number');
+        }
+
+        $maxEpisodeNum = $seasonEpisodesQuery->max('episode_number') ?? 0;
+
+
+
         $createdCount = 0;
         $updatedCount = 0;
         $unchangedCount = 0;
@@ -152,7 +197,7 @@ class YouTubePlaylistSyncService
             if (isset($existingVideoIds[$videoId])) {
                 if ($updateExistingMetadata) {
                     try {
-                        $existingEp = Episode::where('program_id', $program->id)
+                        $existingEp = Episode::where('program_id', $season->program_id)
                             ->where('youtube_url', 'like', "%{$videoId}%")
                             ->first();
 
@@ -203,13 +248,14 @@ class YouTubePlaylistSyncService
                 continue;
             }
 
-            // Mark as processed in-memory so duplicates within the playlist are not re-created
+            // Mark as processed in-memory
             $existingVideoIds[$videoId] = true;
-
             $maxEpisodeNum++;
 
             $episodeData = [
-                'program_id' => $program->id,
+                'program_id' => $season->program_id,
+                'season_number' => $season->season_number,
+                'season_year' => $season->season_year,
                 'video_source' => 'youtube',
                 'youtube_url' => $canonicalUrl,
                 'title' => $item['title'],
@@ -233,11 +279,14 @@ class YouTubePlaylistSyncService
         }
 
         if (! $dryRun) {
-            $program->update(['last_youtube_sync_at' => now()]);
+            $season->update(['last_youtube_sync_at' => now()]);
+            if ($program) {
+                $program->update(['last_youtube_sync_at' => now()]);
+            }
 
             YoutubeSyncLog::create([
-                'program_id' => $program->id,
-                'playlist_url' => $program->youtube_playlist_url,
+                'program_id' => $season->program_id,
+                'playlist_url' => $playlistUrl,
                 'status' => $errorCount > 0 ? 'partial' : 'success',
                 'checked_videos' => count($rawItems),
                 'new_videos' => $createdCount,
@@ -250,9 +299,11 @@ class YouTubePlaylistSyncService
 
         return [
             'success' => true,
-            'program_id' => $program->id,
-            'program_name' => $program->name,
-            'playlist_url' => $program->youtube_playlist_url,
+            'program_id' => $season->program_id,
+            'program_name' => $program?->name ?? 'Program',
+            'season_number' => $season->season_number,
+            'season_year' => $season->season_year,
+            'playlist_url' => $playlistUrl,
             'total_items' => count($rawItems),
             'new_videos' => $createdCount,
             'created_episodes' => $createdCount,
@@ -266,17 +317,144 @@ class YouTubePlaylistSyncService
     }
 
     /**
-     * Synchronize all active programs that have a configured YouTube playlist URL (Create-only mode).
+     * Synchronize a single program's YouTube playlist (or specific season).
      */
-    public function syncAllPlaylists(bool $dryRun = false): array
-    {
-        $programs = Program::whereNotNull('youtube_playlist_url')
+    public function syncProgramPlaylist(
+        Program $program,
+        bool $dryRun = false,
+        bool $updateExistingMetadata = false,
+        ?int $seasonNumber = null,
+        ?string $seasonYear = null
+    ): array {
+        // If specific season requested
+        if ($seasonNumber !== null || filled($seasonYear)) {
+            $season = ProgramSeason::findSeason($program->id, $seasonNumber, $seasonYear);
+            if ($season && filled($season->youtube_playlist_url)) {
+                return $this->syncSeason($season, $dryRun, $updateExistingMetadata);
+            }
+
+            // If no season record exists, but program has playlist URL, create a season record or fallback
+            if (filled($program->youtube_playlist_url)) {
+                $season = ProgramSeason::updateOrCreate(
+                    [
+                        'program_id' => $program->id,
+                        'season_number' => $seasonNumber,
+                        'season_year' => $seasonYear,
+                    ],
+                    [
+                        'youtube_playlist_url' => $program->youtube_playlist_url,
+                    ]
+                );
+
+                return $this->syncSeason($season, $dryRun, $updateExistingMetadata);
+            }
+        }
+
+        // If no specific season requested, check if program has season-level playlists
+        $seasons = ProgramSeason::where('program_id', $program->id)
+            ->whereNotNull('youtube_playlist_url')
             ->where('youtube_playlist_url', '!=', '')
             ->get();
 
+        if ($seasons->isNotEmpty()) {
+            $combinedResult = [
+                'success' => true,
+                'program_id' => $program->id,
+                'program_name' => $program->name,
+                'playlist_url' => $seasons->first()->youtube_playlist_url,
+                'total_items' => 0,
+                'new_videos' => 0,
+                'created_episodes' => 0,
+                'updated_episodes' => 0,
+                'unchanged_episodes' => 0,
+                'skipped_existing' => 0,
+                'errors' => 0,
+                'dry_run' => $dryRun,
+                'items' => [],
+            ];
+
+            foreach ($seasons as $s) {
+                $res = $this->syncSeason($s, $dryRun, $updateExistingMetadata);
+                $combinedResult['total_items'] += $res['total_items'] ?? 0;
+                $combinedResult['new_videos'] += $res['new_videos'] ?? 0;
+                $combinedResult['created_episodes'] += $res['created_episodes'] ?? 0;
+                $combinedResult['updated_episodes'] += $res['updated_episodes'] ?? 0;
+                $combinedResult['unchanged_episodes'] += $res['unchanged_episodes'] ?? 0;
+                $combinedResult['skipped_existing'] += $res['skipped_existing'] ?? 0;
+                $combinedResult['errors'] += $res['errors'] ?? 0;
+                $combinedResult['items'] = array_merge($combinedResult['items'], $res['items'] ?? []);
+                if (! ($res['success'] ?? true)) {
+                    $combinedResult['success'] = false;
+                    $combinedResult['message'] = $res['message'] ?? 'Senkronizasyon hatası';
+                }
+            }
+
+            return $combinedResult;
+        }
+
+        // Fallback for program with only program-level URL
+        if (filled($program->youtube_playlist_url)) {
+            $season = ProgramSeason::updateOrCreate(
+                [
+                    'program_id' => $program->id,
+                    'season_number' => 1,
+                    'season_year' => null,
+                ],
+                [
+                    'youtube_playlist_url' => $program->youtube_playlist_url,
+                ]
+            );
+
+            return $this->syncSeason($season, $dryRun, $updateExistingMetadata);
+        }
+
+        return [
+            'success' => true,
+            'program_id' => $program->id,
+            'program_name' => $program->name,
+            'total_items' => 0,
+            'new_videos' => 0,
+            'created_episodes' => 0,
+            'updated_episodes' => 0,
+            'unchanged_episodes' => 0,
+            'skipped_existing' => 0,
+            'errors' => 0,
+            'dry_run' => $dryRun,
+            'message' => 'Bu programa ait bir YouTube Playlist URL tanımlanmamış.',
+            'items' => [],
+        ];
+    }
+
+    /**
+     * Synchronize all active program seasons that have a configured YouTube playlist URL.
+     */
+    public function syncAllPlaylists(bool $dryRun = false): array
+    {
+        $seasons = ProgramSeason::whereNotNull('youtube_playlist_url')
+            ->where('youtube_playlist_url', '!=', '')
+            ->with('program')
+            ->get();
+
+        // Also check any legacy programs that have playlist URL without program_seasons row
+        $existingProgIds = $seasons->pluck('program_id')->toArray();
+        $legacyPrograms = Program::whereNotNull('youtube_playlist_url')
+            ->where('youtube_playlist_url', '!=', '')
+            ->whereNotIn('id', $existingProgIds)
+            ->get();
+
+        foreach ($legacyPrograms as $lp) {
+            $s = ProgramSeason::create([
+                'program_id' => $lp->id,
+                'season_number' => 1,
+                'season_year' => null,
+                'youtube_playlist_url' => $lp->youtube_playlist_url,
+            ]);
+            $seasons->push($s);
+        }
+
         $stats = [
-            'checked_programs' => $programs->count(),
-            'checked_playlists' => $programs->count(),
+            'checked_programs' => $seasons->pluck('program_id')->unique()->count(),
+            'checked_playlists' => $seasons->count(),
             'new_videos_found' => 0,
             'created_episodes' => 0,
             'skipped_existing' => 0,
@@ -285,8 +463,8 @@ class YouTubePlaylistSyncService
             'details' => [],
         ];
 
-        foreach ($programs as $program) {
-            $res = $this->syncProgramPlaylist($program, $dryRun, false);
+        foreach ($seasons as $season) {
+            $res = $this->syncSeason($season, $dryRun, false);
             $stats['new_videos_found'] += $res['new_videos'] ?? 0;
             $stats['created_episodes'] += $res['created_episodes'] ?? 0;
             $stats['skipped_existing'] += $res['skipped_existing'] ?? 0;

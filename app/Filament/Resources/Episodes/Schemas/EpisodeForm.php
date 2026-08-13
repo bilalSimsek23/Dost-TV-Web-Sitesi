@@ -42,11 +42,13 @@ class EpisodeForm
 
                                     TextInput::make('season_year')
                                         ->label('Sezon Yılı')
-                                        ->numeric()
-                                        ->minValue(1900)
-                                        ->maxValue(2100)
-                                        ->placeholder('Örn: 2017')
-                                        ->helperText('Opsiyonel'),
+                                        ->placeholder('Örn: 2017 veya 2022-2023')
+                                        ->helperText('Opsiyonel (Örn: 2017 veya 2022-2023)')
+                                        ->regex('/^\d{4}(-\d{4})?$/')
+                                        ->validationMessages([
+                                            'regex' => 'Sezon yılı YYYY (örn: 2017) veya YYYY-YYYY (örn: 2022-2023) formatında olmalıdır.',
+                                        ]),
+
 
                                     TextInput::make('episode_number')
                                         ->label('Bölüm Numarası')

@@ -70,19 +70,90 @@
             </aside>
         </div>
 
-        @if ($program->episodes->isNotEmpty())
+        @if ($seasons->isNotEmpty())
             <div class="mt-16">
-                <h2 class="text-2xl font-bold text-white">Video Arşivi</h2>
-                <div class="mt-6 grid grid-cols-2 gap-6 sm:grid-cols-3 lg:grid-cols-4">
-                    @foreach ($program->episodes as $episode)
+                <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-4 border-b border-white/10">
+                    <div>
+                        <h2 class="text-2xl font-bold text-white tracking-tight">Sezonlar</h2>
+                        <p class="text-sm text-slate-400 mt-1">İzlemek istediğiniz sezonu seçerek bölümlere ulaşabilirsiniz.</p>
+                    </div>
+                    @if ($selectedSeason)
+                        <div class="text-xs font-semibold text-rose-300 bg-rose-950/40 border border-rose-800/40 px-3 py-1.5 rounded-full self-start sm:self-auto">
+                            Seçili: Sezon {{ $selectedSeason->season_number }}{{ $selectedSeason->season_year ? ' (' . $selectedSeason->season_year . ')' : '' }} · {{ $episodes->count() }} Bölüm
+                        </div>
+                    @endif
+                </div>
+
+                @if ($seasons->count() > 1)
+                    <div class="mt-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+                        @foreach ($seasons as $season)
+                            @php
+                                $isActive = ($selectedSeason && $selectedSeason->season_number == $season->season_number && (!$selectedSeason->season_year || $selectedSeason->season_year == $season->season_year));
+                                $seasonTitle = 'Sezon ' . $season->season_number . ($season->season_year ? ' (' . $season->season_year . ')' : '');
+                                $seasonUrl = route('programs.show', array_filter([
+                                    'program' => $program,
+                                    'season' => $season->season_number,
+                                    'year' => $season->season_year,
+                                ]));
+                            @endphp
+                            <a href="{{ $seasonUrl }}"
+                               class="group relative flex items-center justify-between p-4 rounded-xl transition-all duration-200 {{ $isActive ? 'bg-gradient-to-r from-rose-900/60 to-rose-950/80 border-rose-500/60 shadow-lg shadow-rose-950/50 ring-1 ring-rose-500/50' : 'bg-white/[0.03] hover:bg-white/[0.07] border-white/10 text-slate-300 hover:text-white' }} border">
+                                <div class="flex items-center gap-3">
+                                    <div class="w-2.5 h-2.5 rounded-full {{ $isActive ? 'bg-rose-500 animate-pulse' : 'bg-slate-600 group-hover:bg-slate-400' }}"></div>
+                                    <div>
+                                        <div class="font-bold text-base text-white group-hover:text-rose-300 transition-colors">
+                                            {{ $seasonTitle }}
+                                        </div>
+                                        <div class="text-xs text-slate-400 mt-0.5">
+                                            {{ $season->total_episodes }} Bölüm
+                                        </div>
+                                    </div>
+                                </div>
+                                <span class="text-xs font-semibold px-2.5 py-1 rounded-lg transition-colors {{ $isActive ? 'bg-rose-500/30 text-rose-200 border border-rose-400/30' : 'bg-white/5 text-slate-400 group-hover:bg-white/10 group-hover:text-slate-200' }}">
+                                    {{ $isActive ? 'Seçili' : 'Görüntüle' }}
+                                </span>
+                            </a>
+                        @endforeach
+                    </div>
+                @else
+                    @php
+                        $singleSeason = $seasons->first();
+                        $singleSeasonTitle = 'Sezon ' . $singleSeason->season_number . ($singleSeason->season_year ? ' (' . $singleSeason->season_year . ')' : '');
+                    @endphp
+                    <div class="mt-4 inline-flex items-center gap-3 px-4 py-2 rounded-xl bg-white/[0.03] border border-white/10 text-sm">
+                        <span class="font-semibold text-white">{{ $singleSeasonTitle }}</span>
+                        <span class="text-xs text-slate-400 bg-white/10 px-2 py-0.5 rounded-md">{{ $singleSeason->total_episodes }} Bölüm</span>
+                    </div>
+                @endif
+            </div>
+        @endif
+
+        @if ($episodes->isNotEmpty())
+            <div class="{{ $seasons->isNotEmpty() ? 'mt-12' : 'mt-16' }}">
+                <div class="flex items-center justify-between gap-4 mb-6">
+                    <div>
+                        <h2 class="text-2xl font-bold text-white tracking-tight">Video Arşivi</h2>
+                        @if ($selectedSeason)
+                            <p class="text-sm text-slate-400 mt-1">
+                                Sezon {{ $selectedSeason->season_number }}{{ $selectedSeason->season_year ? ' (' . $selectedSeason->season_year . ')' : '' }} videoları listeleniyor
+                            </p>
+                        @endif
+                    </div>
+                    <span class="text-xs font-semibold text-slate-400 bg-white/5 border border-white/10 px-3 py-1 rounded-full">
+                        {{ $episodes->count() }} Video
+                    </span>
+                </div>
+
+                <div class="grid grid-cols-2 gap-6 sm:grid-cols-3 lg:grid-cols-4">
+                    @foreach ($episodes as $episode)
                         <button type="button"
-                                class="episode-select group text-left"
+                                class="episode-select group text-left flex flex-col"
                                 data-type="{{ $episode->video_source === 'youtube' ? 'iframe' : 'video' }}"
                                 data-src="{{ $episode->video_source === 'youtube' ? $episode->youtube_embed_url : ($episode->video_path ? asset('storage/' . $episode->video_path) : '') }}">
-                            <div class="aspect-video overflow-hidden rounded-lg bg-slate-900 ring-1 ring-white/10">
+                            <div class="aspect-video w-full overflow-hidden rounded-lg bg-slate-900 ring-1 ring-white/10 relative">
                                 @if ($episode->thumbnail)
                                     <img src="{{ asset('storage/' . $episode->thumbnail) }}" alt="{{ $episode->title }}"
-                                         class="h-full w-full object-cover transition duration-300 group-hover:scale-105">
+                                         class="h-full w-full object-cover transition duration-300 group-hover:scale-105" loading="lazy">
                                 @else
                                     <div class="flex h-full w-full items-center justify-center text-slate-700">
                                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="h-8 w-8">
@@ -90,16 +161,26 @@
                                         </svg>
                                     </div>
                                 @endif
+                                @if ($episode->episode_number)
+                                    <div class="absolute bottom-2 left-2 rounded bg-black/80 px-1.5 py-0.5 text-xs font-semibold text-rose-300 backdrop-blur-sm">
+                                        B{{ $episode->episode_number }}
+                                    </div>
+                                @endif
                             </div>
-                            <p class="mt-2 text-sm font-medium text-white group-hover:text-rose-300">{{ $episode->title }}</p>
+                            <p class="mt-2.5 text-sm font-medium text-white group-hover:text-rose-300 line-clamp-2 transition-colors">{{ $episode->title }}</p>
                             @if ($episode->aired_at)
-                                <p class="text-xs text-slate-500">{{ $episode->aired_at->format('d.m.Y') }}</p>
+                                <p class="mt-1 text-xs text-slate-500">{{ $episode->aired_at->format('d.m.Y') }}</p>
                             @endif
                         </button>
                     @endforeach
                 </div>
             </div>
+        @else
+            <div class="mt-12 rounded-2xl border border-white/10 bg-white/[0.02] p-8 text-center text-slate-500">
+                Bu sezon için video bulunamadı.
+            </div>
         @endif
+
     </section>
 
     <script>

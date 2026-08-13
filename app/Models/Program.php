@@ -88,7 +88,17 @@ class Program extends Model
         return 'slug';
     }
 
+    public function resolveRouteBinding($value, $field = null)
+    {
+        if ($field) {
+            return $this->where($field, $value)->firstOrFail();
+        }
+
+        return $this->where('id', $value)->orWhere('slug', $value)->firstOrFail();
+    }
+
     public function schedules(): HasMany
+
     {
         return $this->hasMany(Schedule::class);
     }
@@ -108,8 +118,19 @@ class Program extends Model
         return $this->hasMany(YoutubeSyncLog::class);
     }
 
+    public function programSeasons(): HasMany
+    {
+        return $this->hasMany(ProgramSeason::class);
+    }
+
+    public function getSeasonPlaylistUrl(?int $seasonNumber = null, ?string $seasonYear = null): ?string
+    {
+        return ProgramSeason::resolvePlaylistUrl($this, $seasonNumber, $seasonYear);
+    }
+
     public function getTrailerEmbedUrlAttribute(): ?string
     {
         return Youtube::embedUrl($this->trailer_url);
     }
 }
+

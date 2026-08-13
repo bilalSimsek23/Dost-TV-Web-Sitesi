@@ -98,7 +98,8 @@ class VideoArchivePage extends Page implements HasForms, HasTable
                     ->label('Programı Düzenle')
                     ->icon('heroicon-o-pencil-square')
                     ->color('primary')
-                    ->url(fn (Program $record) => url("/admin/programs/{$record->id}/edit")),
+                    ->url(fn (Program $record) => \App\Filament\Resources\Programs\ProgramResource::getUrl('edit', ['record' => $record])),
+
 
                 Action::make('view_episodes')
                     ->label('Bölümleri Gör')

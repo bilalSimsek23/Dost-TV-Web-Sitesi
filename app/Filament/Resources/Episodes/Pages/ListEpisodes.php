@@ -5,9 +5,11 @@ namespace App\Filament\Resources\Episodes\Pages;
 use App\Filament\Resources\Episodes\EpisodeResource;
 use App\Models\Episode;
 use App\Models\Program;
+use App\Models\ProgramSeason;
 use App\Services\YouTube\YouTubePlaylistSyncService;
 use Filament\Actions\Action;
 use Filament\Actions\CreateAction;
+use Filament\Forms\Components\TextInput;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\ListRecords;
 use Livewire\Attributes\Url;
@@ -60,7 +62,7 @@ class ListEpisodes extends ListRecords
             }
 
             if (filled($year) && $year !== 'none') {
-                $query->where('season_year', (int) $year);
+                $query->where('season_year', (string) $year);
             } elseif ($year === 'none') {
                 $query->whereNull('season_year');
             }
@@ -84,6 +86,9 @@ class ListEpisodes extends ListRecords
             $seasonValue = (filled($season) && $season !== 'none') ? $season : '';
             $yearValue = (filled($year) && $year !== 'none') ? $year : '';
 
+            $seasonNum = ($season === 'none' || blank($season)) ? null : (int) $season;
+            $seasonYr = ($year === 'none' || blank($year)) ? null : (string) $year;
+
             $params = "?program_id={$programId}";
             if (filled($seasonValue)) {
                 $params .= "&season_number={$seasonValue}";
@@ -95,6 +100,31 @@ class ListEpisodes extends ListRecords
             $createUrl = static::getResource()::getUrl('create') . $params;
             $importUrl = static::getResource()::getUrl('youtube-import') . $params;
 
+            $seasonRecord = $program ? ProgramSeason::findSeason($program->id, $seasonNum, $seasonYr) : null;
+            $playlistUrl = $seasonRecord?->youtube_playlist_url ?? ProgramSeason::resolvePlaylistUrl($program, $seasonNum, $seasonYr);
+            $hasPlaylistUrl = filled($playlistUrl);
+
+            // Check if this season has any youtube episodes
+            $hasYoutubeEpisodes = false;
+            if ($program) {
+                $episodesQuery = Episode::where('program_id', $program->id);
+                if ($seasonNum === null) {
+                    $episodesQuery->whereNull('season_number');
+                } else {
+                    $episodesQuery->where('season_number', $seasonNum);
+                }
+
+                if ($seasonYr !== null) {
+                    $episodesQuery->where('season_year', $seasonYr);
+                } else {
+                    $episodesQuery->whereNull('season_year');
+                }
+
+                $hasYoutubeEpisodes = $episodesQuery->where(function ($q) {
+                    $q->where('video_source', 'youtube')->orWhereNotNull('youtube_url');
+                })->exists();
+            }
+
             $actions = [
                 Action::make('back_to_main')
                     ->label('← Tüm Program & Sezonlara Dön')
@@ -102,21 +132,25 @@ class ListEpisodes extends ListRecords
                     ->url(static::getResource()::getUrl('index')),
             ];
 
-            if ($program && filled($program->youtube_playlist_url)) {
+            if ($hasPlaylistUrl) {
                 $actions[] = Action::make('open_playlist_url')
                     ->label("YouTube Playlist'i Aç ↗")
                     ->icon('heroicon-o-arrow-top-right-on-square')
                     ->color('gray')
-                    ->url($program->youtube_playlist_url)
+                    ->url($playlistUrl)
                     ->openUrlInNewTab();
 
                 $actions[] = Action::make('sync_youtube_playlist')
                     ->label('YouTube ile Senkronize Et')
                     ->icon('heroicon-o-arrow-path')
                     ->color('warning')
-                    ->action(function () use ($program) {
+                    ->action(function () use ($program, $seasonRecord, $seasonNum, $seasonYr) {
                         $service = app(YouTubePlaylistSyncService::class);
-                        $result = $service->syncProgramPlaylist($program, false, true);
+                        if ($seasonRecord) {
+                            $result = $service->syncSeason($seasonRecord, false, true);
+                        } else {
+                            $result = $service->syncProgramPlaylist($program, false, true, $seasonNum, $seasonYr);
+                        }
 
                         if (! ($result['success'] ?? true)) {
                             Notification::make()
@@ -146,7 +180,55 @@ class ListEpisodes extends ListRecords
                             ->success()
                             ->send();
                     });
+            } else {
+                $seasonLabel = ($seasonNum ? "Sezon {$seasonNum}" : "Sezonsuz") . ($seasonYr ? " ({$seasonYr})" : '');
+                $actions[] = Action::make('attach_playlist_url')
+                    ->label('Playlist URL Bağla')
+                    ->icon('heroicon-o-link')
+                    ->color('gray')
+                    ->modalHeading(($program ? $program->name : 'Program') . " — {$seasonLabel} İçin YouTube Playlist Bağla")
+                    ->modalDescription('Bu sezon için YouTube Playlist URL\'si tanımlanmamış. URL bağlayarak tek tıkla bu sezonun playlistini açabilir ve senkronize edebilirsiniz.')
+                    ->modalSubmitActionLabel('Kaydet ve Bağla')
+                    ->form([
+                        TextInput::make('youtube_playlist_url')
+                            ->label('YouTube Playlist URL')
+                            ->placeholder('https://www.youtube.com/playlist?list=...')
+                            ->helperText('Geçerli bir YouTube playlist URL\'si girin.')
+                            ->url()
+                            ->required(),
+                    ])
+                    ->action(function (array $data) use ($program, $seasonNum, $seasonYr) {
+                        if (! $program) {
+                            return;
+                        }
+                        $url = trim($data['youtube_playlist_url']);
+                        ProgramSeason::updateOrCreate(
+                            [
+                                'program_id' => $program->id,
+                                'season_number' => $seasonNum,
+                                'season_year' => $seasonYr,
+                            ],
+                            [
+                                'youtube_playlist_url' => $url,
+                            ]
+                        );
+
+                        Notification::make()
+                            ->title('YouTube Playlist URL başarıyla kaydedildi.')
+                            ->success()
+                            ->send();
+                    });
+
+                $actions[] = Action::make('sync_youtube_playlist')
+                    ->label('YouTube ile Senkronize Et')
+                    ->icon('heroicon-o-arrow-path')
+                    ->color('gray')
+                    ->disabled()
+                    ->tooltip($hasYoutubeEpisodes
+                        ? 'Bu sezon playlistten aktarılmış ancak playlist URL\'si kayıtlı değil. Önce Playlist URL Bağlayın.'
+                        : 'Bu sezona ait bir YouTube Playlist URL tanımlanmamış. Önce Playlist URL Bağlayın.');
             }
+
 
             $actions[] = Action::make('youtube_import')
                 ->label("YouTube Playlist İçe Aktar")
@@ -175,3 +257,4 @@ class ListEpisodes extends ListRecords
         ];
     }
 }
+

@@ -37,8 +37,9 @@ class ProgramsTable
                     ->label('Bölüm Sayısı')
                     ->counts('episodes')
                     ->formatStateUsing(fn ($state) => "{$state} Bölüm")
-                    ->url(fn (Program $record) => url("/admin/programs/{$record->id}/edit"))
+                    ->url(fn (Program $record) => \App\Filament\Resources\Programs\ProgramResource::getUrl('edit', ['record' => $record]))
                     ->sortable(),
+
 
                 TextColumn::make('show_on_public')
                     ->label('Public')

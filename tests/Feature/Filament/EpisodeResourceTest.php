@@ -131,11 +131,66 @@ class EpisodeResourceTest extends TestCase
         ]);
 
         Livewire::actingAs($this->admin)
-            ->withQueryParams(['program_id' => $prog->id, 'season_number' => 2, 'season_year' => 2026])
+            ->withQueryParams(['program_id' => $prog->id, 'season_number' => 2, 'season_year' => '2026'])
             ->test(CreateEpisode::class)
             ->assertSet('data.program_id', (string) $prog->id)
             ->assertSet('data.season_number', 2)
-            ->assertSet('data.season_year', 2026);
+            ->assertSet('data.season_year', '2026');
+    }
+
+    public function test_create_episode_with_year_range_and_single_year(): void
+    {
+        Livewire::actingAs($this->admin)
+            ->test(CreateEpisode::class)
+            ->fillForm([
+                'program_id' => $this->program->id,
+                'season_number' => 6,
+                'season_year' => '2022-2023',
+                'episode_number' => 1,
+                'title' => '2022-2023 Bölüm',
+                'slug' => '2022-2023-bolum',
+                'video_source' => 'custom',
+            ])
+            ->call('create')
+            ->assertHasNoFormErrors();
+
+        $this->assertDatabaseHas('episodes', [
+            'program_id' => $this->program->id,
+            'season_number' => 6,
+            'season_year' => '2022-2023',
+            'title' => '2022-2023 Bölüm',
+        ]);
+    }
+
+    public function test_create_episode_with_invalid_season_year_format_fails_validation(): void
+    {
+        Livewire::actingAs($this->admin)
+            ->test(CreateEpisode::class)
+            ->fillForm([
+                'program_id' => $this->program->id,
+                'season_number' => 6,
+                'season_year' => '2022-',
+                'episode_number' => 1,
+                'title' => 'Geçersiz Yıl Bölüm',
+                'slug' => 'gecersiz-yil-bolum',
+                'video_source' => 'custom',
+            ])
+            ->call('create')
+            ->assertHasFormErrors(['season_year' => 'regex']);
+
+        Livewire::actingAs($this->admin)
+            ->test(CreateEpisode::class)
+            ->fillForm([
+                'program_id' => $this->program->id,
+                'season_number' => 6,
+                'season_year' => '22-23',
+                'episode_number' => 1,
+                'title' => 'Geçersiz Yıl Bölüm 2',
+                'slug' => 'gecersiz-yil-bolum-2',
+                'video_source' => 'custom',
+            ])
+            ->call('create')
+            ->assertHasFormErrors(['season_year' => 'regex']);
     }
 
     public function test_edit_season_action_bulk_updates_season_number_and_year(): void
@@ -165,7 +220,7 @@ class EpisodeResourceTest extends TestCase
             ->test(ListEpisodes::class)
             ->callTableAction('edit_season', $representativeRecord, [
                 'season_number' => 2,
-                'season_year' => 2017,
+                'season_year' => '2017',
             ])
             ->assertHasNoTableActionErrors();
 
@@ -174,10 +229,25 @@ class EpisodeResourceTest extends TestCase
         $this->assertCount(5, $updatedEpisodes);
         foreach ($updatedEpisodes as $ep) {
             $this->assertEquals(2, $ep->season_number);
-            $this->assertEquals(2017, $ep->season_year);
+            $this->assertEquals('2017', $ep->season_year);
             $this->assertStringStartsWith('Bölüm ', $ep->title);
             $this->assertStringStartsWith('https://youtube.com/watch?v=TEST_', $ep->youtube_url);
             $this->assertEquals($prog->id, $ep->program_id);
+        }
+
+        // Now update to year range 2022-2023
+        Livewire::actingAs($this->admin)
+            ->test(ListEpisodes::class)
+            ->callTableAction('edit_season', $representativeRecord->fresh(), [
+                'season_number' => 6,
+                'season_year' => '2022-2023',
+            ])
+            ->assertHasNoTableActionErrors();
+
+        $updatedEpisodesRange = Episode::where('program_id', $prog->id)->get();
+        foreach ($updatedEpisodesRange as $ep) {
+            $this->assertEquals(6, $ep->season_number);
+            $this->assertEquals('2022-2023', $ep->season_year);
         }
     }
 
@@ -192,7 +262,7 @@ class EpisodeResourceTest extends TestCase
         $epGroup1 = Episode::create([
             'program_id' => $prog->id,
             'season_number' => 1,
-            'season_year' => 2017,
+            'season_year' => '2017',
             'episode_number' => 1,
             'title' => 'Grup 1 Bölüm 1',
             'status' => 'published',
@@ -201,7 +271,7 @@ class EpisodeResourceTest extends TestCase
         $epGroup2 = Episode::create([
             'program_id' => $prog->id,
             'season_number' => 2,
-            'season_year' => 2025,
+            'season_year' => '2025',
             'episode_number' => 1,
             'title' => 'Grup 2 Bölüm 1',
             'status' => 'published',
@@ -212,13 +282,14 @@ class EpisodeResourceTest extends TestCase
             ->test(ListEpisodes::class)
             ->callTableAction('edit_season', $epGroup1, [
                 'season_number' => 2,
-                'season_year' => 2025,
+                'season_year' => '2025',
             ]);
 
         // Verify Group 1 was NOT merged or modified
         $this->assertEquals(1, $epGroup1->fresh()->season_number);
-        $this->assertEquals(2017, $epGroup1->fresh()->season_year);
+        $this->assertEquals('2017', $epGroup1->fresh()->season_year);
     }
+
 
     public function test_different_seasons_and_programs_display_as_separate_grouped_rows(): void
     {
@@ -311,6 +382,12 @@ class EpisodeResourceTest extends TestCase
 
     public function test_season_detail_mode_filters_episodes_and_shows_contextual_actions(): void
     {
+        \App\Models\ProgramSeason::create([
+            'program_id' => $this->program->id,
+            'season_number' => 1,
+            'youtube_playlist_url' => 'https://youtube.com/playlist?list=PL_TEST_S1',
+        ]);
+
         $epS1 = Episode::create([
             'program_id' => $this->program->id,
             'season_number' => 1,
@@ -417,5 +494,126 @@ class EpisodeResourceTest extends TestCase
             ->assertStatus(200)
             ->assertSee('Yayındaki Bölüm');
     }
+
+    public function test_season_detail_mode_shows_attach_playlist_url_and_disabled_sync_when_playlist_missing(): void
+    {
+        $progWithoutPlaylist = Program::create([
+            'name' => 'Hikmet Arayışları Test',
+            'slug' => 'hikmet-arayislari-test',
+            'status' => 'active',
+            'youtube_playlist_url' => null,
+        ]);
+
+        Episode::create([
+            'program_id' => $progWithoutPlaylist->id,
+            'season_number' => 1,
+            'season_year' => '2017',
+            'episode_number' => 1,
+            'title' => 'Bölüm 1',
+            'video_source' => 'youtube',
+            'youtube_url' => 'https://www.youtube.com/watch?v=TEST_VID',
+            'status' => 'published',
+        ]);
+
+        Livewire::actingAs($this->admin)
+            ->withQueryParams([
+                'program_id' => $progWithoutPlaylist->id,
+                'season_number' => 1,
+                'season_year' => '2017',
+            ])
+            ->test(ListEpisodes::class)
+            ->assertActionExists('back_to_main')
+            ->assertActionExists('attach_playlist_url')
+            ->assertActionExists('sync_youtube_playlist')
+            ->assertActionExists('youtube_import')
+            ->assertActionExists('create_episode')
+            ->assertActionDoesNotExist('open_playlist_url');
+    }
+
+    public function test_attach_playlist_url_action_saves_url_and_activates_open_playlist(): void
+    {
+        $prog = Program::create([
+            'name' => 'Playlist Bağlama Testi',
+            'slug' => 'playlist-baglama-testi',
+            'status' => 'active',
+            'youtube_playlist_url' => null,
+        ]);
+
+        Livewire::actingAs($this->admin)
+            ->withQueryParams(['program_id' => $prog->id, 'season_number' => 1])
+            ->test(ListEpisodes::class)
+            ->callAction('attach_playlist_url', [
+                'youtube_playlist_url' => 'https://www.youtube.com/playlist?list=PL_ATTACH_TEST_123',
+            ])
+            ->assertHasNoActionErrors();
+
+        $this->assertEquals('https://www.youtube.com/playlist?list=PL_ATTACH_TEST_123', $prog->getSeasonPlaylistUrl(1));
+
+        // Reload to verify open_playlist_url is now active
+        Livewire::actingAs($this->admin)
+            ->withQueryParams(['program_id' => $prog->id, 'season_number' => 1])
+            ->test(ListEpisodes::class)
+            ->assertActionExists('open_playlist_url')
+            ->assertActionDoesNotExist('attach_playlist_url');
+    }
+
+    public function test_multi_season_programs_resolve_independent_playlist_urls(): void
+    {
+        $hikmet = Program::create([
+            'name' => 'Hikmet Arayışları Çoklu Sezon',
+            'slug' => 'hikmet-arayislari-coklu-sezon',
+            'status' => 'active',
+        ]);
+
+        \App\Models\ProgramSeason::create([
+            'program_id' => $hikmet->id,
+            'season_number' => 1,
+            'season_year' => '2017',
+            'youtube_playlist_url' => 'https://www.youtube.com/playlist?list=PL_HIKMET_S1_2017',
+        ]);
+
+        \App\Models\ProgramSeason::create([
+            'program_id' => $hikmet->id,
+            'season_number' => 2,
+            'season_year' => '2018',
+            'youtube_playlist_url' => 'https://www.youtube.com/playlist?list=PL_HIKMET_S2_2018',
+        ]);
+
+        \App\Models\ProgramSeason::create([
+            'program_id' => $hikmet->id,
+            'season_number' => 3,
+            'season_year' => '2019',
+            'youtube_playlist_url' => 'https://www.youtube.com/playlist?list=PL_HIKMET_S3_2019',
+        ]);
+
+        $this->assertEquals('https://www.youtube.com/playlist?list=PL_HIKMET_S1_2017', $hikmet->getSeasonPlaylistUrl(1, '2017'));
+        $this->assertEquals('https://www.youtube.com/playlist?list=PL_HIKMET_S2_2018', $hikmet->getSeasonPlaylistUrl(2, '2018'));
+        $this->assertEquals('https://www.youtube.com/playlist?list=PL_HIKMET_S3_2019', $hikmet->getSeasonPlaylistUrl(3, '2019'));
+
+        // Test S1 page
+        Livewire::actingAs($this->admin)
+            ->withQueryParams(['program_id' => $hikmet->id, 'season_number' => 1, 'season_year' => '2017'])
+            ->test(ListEpisodes::class)
+            ->assertActionExists('open_playlist_url')
+            ->assertActionHasUrl('open_playlist_url', 'https://www.youtube.com/playlist?list=PL_HIKMET_S1_2017');
+
+        // Test S2 page
+        Livewire::actingAs($this->admin)
+            ->withQueryParams(['program_id' => $hikmet->id, 'season_number' => 2, 'season_year' => '2018'])
+            ->test(ListEpisodes::class)
+            ->assertActionExists('open_playlist_url')
+            ->assertActionHasUrl('open_playlist_url', 'https://www.youtube.com/playlist?list=PL_HIKMET_S2_2018');
+
+        // Test S3 page
+        Livewire::actingAs($this->admin)
+            ->withQueryParams(['program_id' => $hikmet->id, 'season_number' => 3, 'season_year' => '2019'])
+            ->test(ListEpisodes::class)
+            ->assertActionExists('open_playlist_url')
+            ->assertActionHasUrl('open_playlist_url', 'https://www.youtube.com/playlist?list=PL_HIKMET_S3_2019');
+    }
 }
+
+
+
+
 
