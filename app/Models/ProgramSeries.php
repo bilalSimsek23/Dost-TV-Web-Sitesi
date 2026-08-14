@@ -60,6 +60,29 @@ class ProgramSeries extends Model
     }
 
     /**
+     * Compute the public display label based on priority rule:
+     * A) season_year if filled
+     * B) series.name if filled
+     * C) "Sezon {$season_number}" fallback
+     */
+    public function getPublicLabelAttribute(): string
+    {
+        if (filled($this->name)) {
+            return (string) $this->name;
+        }
+
+        if (filled($this->programSeason?->season_year)) {
+            return (string) $this->programSeason->season_year;
+        }
+
+        if (filled($this->programSeason?->season_number)) {
+            return 'Sezon ' . $this->programSeason->season_number;
+        }
+
+        return 'Genel';
+    }
+
+    /**
      * Find a program series matching program_id, program_season_id (optional), and series name.
      */
     public static function findSeries(int $programId, ?int $programSeasonId, string $name): ?self

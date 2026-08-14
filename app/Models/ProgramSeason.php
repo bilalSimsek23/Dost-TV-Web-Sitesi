@@ -39,6 +39,30 @@ class ProgramSeason extends Model
     }
 
     /**
+     * Compute the public display label based on priority rule:
+     * A) season_year if filled
+     * B) series.name if filled
+     * C) "Sezon {$season_number}" fallback
+     */
+    public function getPublicLabelAttribute(): string
+    {
+        if (filled($this->season_year)) {
+            return (string) $this->season_year;
+        }
+
+        $seriesName = $this->programSeries()->first()?->name;
+        if (filled($seriesName)) {
+            return (string) $seriesName;
+        }
+
+        if (filled($this->season_number)) {
+            return 'Sezon ' . $this->season_number;
+        }
+
+        return 'Genel';
+    }
+
+    /**
      * Find a program season record matching program_id, season_number and season_year.
      */
     public static function findSeason(int $programId, ?int $seasonNumber = null, ?string $seasonYear = null): ?self

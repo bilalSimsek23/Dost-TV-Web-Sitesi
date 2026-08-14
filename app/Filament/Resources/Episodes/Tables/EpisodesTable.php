@@ -683,11 +683,22 @@ class EpisodesTable
 
                 IconColumn::make('show_on_public')
                     ->label('Public')
-                    ->boolean()
-                    ->trueIcon('heroicon-o-eye')
-                    ->falseIcon('heroicon-o-eye-slash')
-                    ->trueColor('success')
-                    ->falseColor('gray'),
+                    ->icon(fn (bool $state): string => $state ? 'heroicon-o-eye' : 'heroicon-o-eye-slash')
+                    ->color(fn (bool $state): string => $state ? 'success' : 'gray')
+                    ->tooltip(fn (bool $state): string => $state ? 'Sitede görünüyor' : 'Sitede gizli')
+                    ->action(function (Episode $record) {
+                        $newPublic = ! (bool) $record->show_on_public;
+                        $record->update([
+                            'show_on_public' => $newPublic,
+                            'is_active' => $newPublic && $record->status === 'published',
+                        ]);
+
+                        Notification::make()
+                            ->title($newPublic ? 'Bölüm sitede görünür yapıldı.' : 'Bölüm siteden gizlendi.')
+                            ->success()
+                            ->duration(2500)
+                            ->send();
+                    }),
             ])
             ->actions([
                 EditAction::make(),

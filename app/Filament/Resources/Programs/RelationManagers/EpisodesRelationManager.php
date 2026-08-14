@@ -10,8 +10,10 @@ use Filament\Actions\CreateAction;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\EditAction;
 use Filament\Forms\Components\Hidden;
+use Filament\Notifications\Notification;
 use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Schemas\Schema;
+use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 use Illuminate\Support\HtmlString;
@@ -112,6 +114,25 @@ class EpisodesRelationManager extends RelationManager
                                 <span>YouTube'da Aç ↗</span>
                             </a>
                         ");
+                    }),
+
+                IconColumn::make('show_on_public')
+                    ->label('Public')
+                    ->icon(fn (bool $state): string => $state ? 'heroicon-o-eye' : 'heroicon-o-eye-slash')
+                    ->color(fn (bool $state): string => $state ? 'success' : 'gray')
+                    ->tooltip(fn (bool $state): string => $state ? 'Sitede görünüyor' : 'Sitede gizli')
+                    ->action(function (Episode $record) {
+                        $newPublic = ! (bool) $record->show_on_public;
+                        $record->update([
+                            'show_on_public' => $newPublic,
+                            'is_active' => $newPublic && $record->status === 'published',
+                        ]);
+
+                        Notification::make()
+                            ->title($newPublic ? 'Bölüm sitede görünür yapıldı.' : 'Bölüm siteden gizlendi.')
+                            ->success()
+                            ->duration(2500)
+                            ->send();
                     }),
             ])
             ->headerActions([

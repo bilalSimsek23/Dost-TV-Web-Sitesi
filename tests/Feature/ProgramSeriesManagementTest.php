@@ -424,11 +424,12 @@ class ProgramSeriesManagementTest extends TestCase
             'show_on_public' => true,
         ]);
 
-        // Default: returns all episodes in the season
+        // Default: displays series boxes and active series videos
         $resDefault = $this->get('/programlar/beraber-okuyalim?season=1&year=2026');
         $resDefault->assertStatus(200);
+        $resDefault->assertSee('Lemalar');
+        $resDefault->assertSee('Sözler');
         $resDefault->assertSee('Lemalar Özel Dersi');
-        $resDefault->assertSee('Sözler Özel Dersi');
 
         // Filtered by series=lemalar
         $resLemalar = $this->get('/programlar/beraber-okuyalim?season=1&year=2026&series=lemalar');
@@ -517,19 +518,22 @@ class ProgramSeriesManagementTest extends TestCase
         $response = $this->get('/programlar/beraber-okuyalim');
         $response->assertStatus(200);
 
-        // 1. Season numbers MUST NOT be displayed for public users
+        // 1. "Sezonlar" header is present on public pages
+        $response->assertSee('Sezonlar');
+        $response->assertSee('İzlemek istediğiniz sezonu seçin.');
+
+        // 2. Season numbers MUST NOT be displayed for public users when series name exists
         $response->assertDontSee('Sezon 4');
         $response->assertDontSee('Sezon 3');
         $response->assertDontSee('Sezon 2');
         $response->assertDontSee('Sezon 1');
-        $response->assertDontSee('Sezonlar');
 
-        // 2. Series names must be displayed as headers
+        // 3. Series names must be displayed as box labels
         $response->assertSee('Sözler');
         $response->assertSee('Lemalar');
         $response->assertSee('Mektubat');
 
-        // 3. Must be ordered in season_number DESC order (Sözler -> Lemalar -> Mektubat)
+        // 4. Must be ordered in season_number DESC order (Sözler -> Lemalar -> Mektubat)
         $content = $response->getContent();
         $posSozler = strpos($content, 'Sözler');
         $posLemalar = strpos($content, 'Lemalar');
@@ -541,10 +545,18 @@ class ProgramSeriesManagementTest extends TestCase
         $this->assertTrue($posSozler < $posLemalar, 'Sözler (Season 4) should appear before Lemalar (Season 3)');
         $this->assertTrue($posLemalar < $posMektubat, 'Lemalar (Season 3) should appear before Mektubat (Season 2)');
 
-        // 4. Each series must display its own videos
+        // 5. Default active series (Sözler) displays its videos
         $response->assertSee('Sözler 1. Video');
-        $response->assertSee('Lemalar 1. Video');
-        $response->assertSee('Mektubat 1. Video');
+        $response->assertDontSee('Lemalar 1. Video');
+
+        // 6. Filter by series=lemalar displays Lemalar videos
+        $lemalarRes = $this->get('/programlar/beraber-okuyalim?seri=lemalar');
+        $lemalarRes->assertStatus(200);
+        $lemalarRes->assertSee('Lemalar 1. Video');
+        $lemalarRes->assertDontSee('Sözler 1. Video');
+
+        // 7. Selected state text
+        $response->assertSee('Seçili: Sözler · 1 Bölüm');
     }
 
     public function test_series_video_grid_renders_all_episodes_with_short_labels(): void
@@ -554,7 +566,7 @@ class ProgramSeriesManagementTest extends TestCase
         $season = ProgramSeason::create([
             'program_id' => $program->id,
             'season_number' => 1,
-            'season_year' => '2026',
+            'season_year' => null,
         ]);
 
         // Series A with 40 videos
@@ -563,6 +575,7 @@ class ProgramSeriesManagementTest extends TestCase
             'program_season_id' => $season->id,
             'name' => '1–10. Söz',
             'slug' => '1-10-soz',
+            'sort_order' => 1,
         ]);
 
         for ($i = 1; $i <= 40; $i++) {
@@ -584,6 +597,7 @@ class ProgramSeriesManagementTest extends TestCase
             'program_season_id' => $season->id,
             'name' => 'Lemalar',
             'slug' => 'lemalar',
+            'sort_order' => 2,
         ]);
 
         for ($i = 1; $i <= 3; $i++) {
@@ -603,9 +617,10 @@ class ProgramSeriesManagementTest extends TestCase
         $response = $this->get('/programlar/beraber-okuyalim');
         $response->assertStatus(200);
 
-        // 1. Total counts are preserved in badges
+        // 1. Total counts are preserved in box and badge
+        $response->assertSee('40 Bölüm');
+        $response->assertSee('3 Bölüm');
         $response->assertSee('40 Video');
-        $response->assertSee('3 Video');
 
         // 2. Short episode labels (1. Bölüm, 2. Bölüm, ...) are rendered
         for ($i = 1; $i <= 40; $i++) {
@@ -629,6 +644,58 @@ class ProgramSeriesManagementTest extends TestCase
 
         // 6. Broadcast dates (aired_at) are NOT rendered on public video cards
         $response->assertDontSee('09.01.2025');
+    }
+
+    public function test_dynamic_box_label_priority_rules_on_public_page(): void
+    {
+        // Program 1: Year filled -> label is year
+        $progYear = Program::create(['name' => 'Yıllı Program', 'slug' => 'yilli-program']);
+        Episode::create([
+            'program_id' => $progYear->id,
+            'title' => 'B1',
+            'season_number' => 9,
+            'season_year' => '2026',
+            'status' => 'published',
+        ]);
+        $resYear = $this->get('/programlar/yilli-program');
+        $resYear->assertOk();
+        $resYear->assertSee('Sezonlar');
+        $resYear->assertSee('2026');
+        $resYear->assertDontSee('Sezon 9');
+        $resYear->assertSee('Seçili: 2026 · 1 Bölüm');
+
+        // Program 2: Series filled, year empty -> label is series name
+        $progSeries = Program::create(['name' => 'Serili Program', 'slug' => 'serili-program']);
+        $season = ProgramSeason::create(['program_id' => $progSeries->id, 'season_number' => 4, 'season_year' => null]);
+        $ser = ProgramSeries::create(['program_id' => $progSeries->id, 'program_season_id' => $season->id, 'name' => 'Lemalar', 'slug' => 'lemalar']);
+        Episode::create([
+            'program_id' => $progSeries->id,
+            'program_series_id' => $ser->id,
+            'season_number' => 4,
+            'title' => 'B1',
+            'status' => 'published',
+        ]);
+        $resSeries = $this->get('/programlar/serili-program');
+        $resSeries->assertOk();
+        $resSeries->assertSee('Sezonlar');
+        $resSeries->assertSee('Lemalar');
+        $resSeries->assertDontSee('Sezon 4');
+        $resSeries->assertSee('Seçili: Lemalar · 1 Bölüm');
+
+        // Program 3: Both empty -> label fallback "Sezon X"
+        $progPure = Program::create(['name' => 'Düz Sezonlu Program', 'slug' => 'duz-sezonlu-program']);
+        Episode::create([
+            'program_id' => $progPure->id,
+            'title' => 'B1',
+            'season_number' => 6,
+            'season_year' => null,
+            'status' => 'published',
+        ]);
+        $resPure = $this->get('/programlar/duz-sezonlu-program');
+        $resPure->assertOk();
+        $resPure->assertSee('Sezonlar');
+        $resPure->assertSee('Sezon 6');
+        $resPure->assertSee('Seçili: Sezon 6 · 1 Bölüm');
     }
 
     public function test_import_allows_and_creates_episodes_for_videos_existing_in_other_series(): void

@@ -64,20 +64,34 @@ class ProgramSeasonViewTest extends TestCase
         $response = $this->get('/programlar/hikmet-arayislari');
         $response->assertOk();
 
+        // 1. "Sezonlar" header is always fixed and present
+        $response->assertSee('Sezonlar');
+        $response->assertSee('İzlemek istediğiniz sezonu seçin.');
+
+        // 2. Year exists -> only year is shown, season numbers are hidden
+        $response->assertSee('2020');
+        $response->assertSee('2018');
+        $response->assertSee('2017');
+        $response->assertDontSee('Sezon 4');
+        $response->assertDontSee('Sezon 2');
+        $response->assertDontSee('Sezon 1');
+
+        // 3. Selected status text uses clean dynamic label
+        $response->assertSee('Seçili: 2020 · 1 Bölüm');
+
+        // 4. Seasons are displayed in DESC order: 2020 before 2018 before 2017
         $content = $response->getContent();
+        $pos2020 = strpos($content, '2020');
+        $pos2018 = strpos($content, '2018');
+        $pos2017 = strpos($content, '2017');
 
-        // Seasons are displayed in DESC order: Sezon 4 before Sezon 2 before Sezon 1
-        $posS4 = strpos($content, 'Sezon 4 (2020)');
-        $posS2 = strpos($content, 'Sezon 2 (2018)');
-        $posS1 = strpos($content, 'Sezon 1 (2017)');
+        $this->assertNotFalse($pos2020);
+        $this->assertNotFalse($pos2018);
+        $this->assertNotFalse($pos2017);
+        $this->assertTrue($pos2020 < $pos2018);
+        $this->assertTrue($pos2018 < $pos2017);
 
-        $this->assertNotFalse($posS4);
-        $this->assertNotFalse($posS2);
-        $this->assertNotFalse($posS1);
-        $this->assertTrue($posS4 < $posS2);
-        $this->assertTrue($posS2 < $posS1);
-
-        // Default active season is Season 4 (1 episode shown)
+        // Default active season is 2020 (1 episode shown)
         $response->assertSee('S4 Bölüm 1');
         $response->assertDontSee('S1 Bölüm 1');
         $response->assertDontSee('S2 Bölüm 1');
@@ -167,9 +181,11 @@ class ProgramSeasonViewTest extends TestCase
         $response = $this->get('/programlar/sezonlu-program');
         $response->assertOk();
 
+        // Season 3 has no year -> falls back to "Sezon 3"
         $response->assertSee('Sezon 3');
-        $response->assertDontSee('Sezon 3 (');
-        $response->assertSee('Sezon 2 (2024)');
+        // Season 2 has year 2024 -> only "2024" is displayed
+        $response->assertSee('2024');
+        $response->assertDontSee('Sezon 2');
     }
 
     public function test_seasonless_program_displays_all_episodes_without_season_selector(): void
@@ -201,7 +217,7 @@ class ProgramSeasonViewTest extends TestCase
         $response = $this->get('/programlar/sezonsuz-program');
         $response->assertOk();
 
-        $response->assertDontSee('İzlemek istediğiniz sezonu seçerek');
+        $response->assertDontSee('İzlemek istediğiniz sezonu seçin.');
         $response->assertSee('Düz Bölüm 1');
         $response->assertSee('Düz Bölüm 2');
     }
@@ -236,8 +252,10 @@ class ProgramSeasonViewTest extends TestCase
 
         $response = $this->get('/programlar/donemli-program');
         $response->assertOk();
-        $response->assertSee('Sezon 6 (2022-2023)');
-        $response->assertSee('Sezon 5 (2021-2022)');
+        $response->assertSee('2022-2023');
+        $response->assertSee('2021-2022');
+        $response->assertDontSee('Sezon 6');
+        $response->assertDontSee('Sezon 5');
         $response->assertSee('S6 B1 Açılış');
 
         $filteredResponse = $this->get('/programlar/donemli-program?season=5&year=2021-2022');
