@@ -15,5 +15,13 @@ class EditScheduleTemplate extends EditRecord
         if ($this->record->is_active) {
             ScheduleTemplate::where('id', '!=', $this->record->id)->update(['is_active' => false]);
         }
+
+        $userName = auth()->user()?->name ?? 'Kullanıcı';
+        \App\Services\Audit\AuditLogger::log(
+            action: 'updated',
+            message: "{$userName}, {$this->record->name} dönemini düzenledi.",
+            subject: $this->record,
+            subjectLabel: $this->record->name,
+        );
     }
 }

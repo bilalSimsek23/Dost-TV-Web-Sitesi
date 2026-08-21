@@ -13,6 +13,7 @@ use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
+use Filament\Schemas\Components\Grid;
 use Filament\Schemas\Components\Tabs;
 use Filament\Schemas\Components\Tabs\Tab;
 use Filament\Schemas\Schema;
@@ -73,6 +74,19 @@ class AnnouncementForm
                                     ->maxSize(25600)
                                     ->helperText('JPG, PNG veya WEBP yükleyebilirsiniz. Maksimum 25 MB. Görsel oranı korunur ve sistem tarafından otomatik optimize edilir.')
                                     ->columnSpanFull(),
+
+                                Grid::make(2)->schema([
+                                    TextInput::make('button_text')
+                                        ->label('Buton Metni (İsteğe Bağlı)')
+                                        ->placeholder('Örn: Yayını İzle')
+                                        ->maxLength(60),
+
+                                    TextInput::make('button_url')
+                                        ->label('Buton Bağlantı Adresi (URL)')
+                                        ->placeholder('Örn: /canli-tv veya https://...')
+                                        ->maxLength(255)
+                                        ->helperText('Duyuruya tıklandığında açılacak sayfa bağlantısı. Boşsa buton gösterilmez.'),
+                                ])->columnSpanFull(),
                             ]),
 
                         Tab::make('Gösterim')
@@ -165,12 +179,14 @@ class AnnouncementForm
                                     ->content(function (?Announcement $record, callable $get) {
                                         return new \Illuminate\Support\HtmlString(
                                             \Illuminate\Support\Facades\Blade::render(
-                                                '<x-site.announcement-popup :preview="true" :announcement="$record" :title="$title" :message="$message" :image="$image" />',
+                                                '<x-site.announcement-popup :preview="true" :announcement="$record" :title="$title" :message="$message" :image="$image" :button-text="$buttonText" :button-url="$buttonUrl" />',
                                                 [
                                                     'record' => $record,
                                                     'title' => $get('title') ?? ($record ? $record->title : 'Duyuru Başlığı'),
                                                     'message' => $get('message') ?? ($record ? $record->message : null),
                                                     'image' => $get('image') ?? ($record ? $record->image : null),
+                                                    'buttonText' => $get('button_text') ?? ($record ? $record->button_text : null),
+                                                    'buttonUrl' => $get('button_url') ?? ($record ? $record->button_url : null),
                                                 ]
                                             )
                                         );

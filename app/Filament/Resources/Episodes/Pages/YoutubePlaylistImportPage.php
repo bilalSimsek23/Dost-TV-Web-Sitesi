@@ -662,7 +662,23 @@ class YoutubePlaylistImportPage extends Page implements HasForms
         $this->isImported = true;
         $this->isPreviewLoaded = false;
 
-        $seriesMsg = filled($this->series_name) ? " [{$this->series_name}]" : '';
+        $program = Program::find($this->program_id);
+        $userName = auth()->user()?->name ?? 'Kullanıcı';
+        $programName = $program?->name ?? 'Program';
+        $seriesMsg = filled($this->series_name) ? " / {$this->series_name}" : '';
+
+        \App\Services\Audit\AuditLogger::log(
+            action: 'imported',
+            message: "{$userName}, {$programName}{$seriesMsg} YouTube oynatma listesinden {$importedCount} bölümü içe aktardı.",
+            subject: $program,
+            subjectLabel: "{$programName}{$seriesMsg}",
+            metadata: [
+                'program_id' => $this->program_id,
+                'imported_count' => $importedCount,
+                'skipped_count' => $skippedCount,
+            ]
+        );
+
         Notification::make()
             ->title("{$importedCount} bölüm{$seriesMsg} başarıyla oluşturuldu." . ($skippedCount > 0 ? " {$skippedCount} hedefte mevcut video atlandı." : ''))
             ->success()

@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\Programs\RelationManagers;
 
+use App\Filament\Concerns\PersistsTablePaginationInUrl;
 use App\Filament\Resources\Episodes\Schemas\EpisodeForm;
 use App\Models\Episode;
 use App\Support\Youtube;
@@ -21,6 +22,8 @@ use Illuminate\Support\Str;
 
 class EpisodesRelationManager extends RelationManager
 {
+    use PersistsTablePaginationInUrl;
+
     protected static string $relationship = 'episodes';
 
     protected static ?string $title = 'Bölümler';
@@ -128,6 +131,21 @@ class EpisodesRelationManager extends RelationManager
                             'is_active' => $newPublic && $record->status === 'published',
                         ]);
 
+                        $userName = auth()->user()?->name ?? 'Kullanıcı';
+                        $programName = $record->program?->name ?? $this->getOwnerRecord()?->name ?? 'Program';
+                        $epNumber = $record->episode_number ?: 'Bölüm';
+                        $action = $newPublic ? 'published' : 'unpublished';
+                        $msg = $newPublic
+                            ? "{$userName}, {$programName} {$epNumber}. Bölüm'ü yayına aldı."
+                            : "{$userName}, {$programName} {$epNumber}. Bölüm'ü yayından kaldırdı.";
+
+                        \App\Services\Audit\AuditLogger::log(
+                            action: $action,
+                            message: $msg,
+                            subject: $record,
+                            subjectLabel: "{$programName} {$epNumber}. Bölüm",
+                        );
+
                         Notification::make()
                             ->title($newPublic ? 'Bölüm sitede görünür yapıldı.' : 'Bölüm siteden gizlendi.')
                             ->success()
@@ -169,6 +187,20 @@ class EpisodesRelationManager extends RelationManager
                             . "Değişmeyen: {$unchanged}\n"
                             . "Hatalı: {$errors}";
 
+                        $userName = auth()->user()?->name ?? 'Kullanıcı';
+                        $programName = $this->getOwnerRecord()?->name ?? 'Program';
+                        \App\Services\Audit\AuditLogger::log(
+                            action: 'synced',
+                            message: "{$userName}, {$programName} YouTube senkronizasyonunu çalıştırdı.",
+                            subject: $this->getOwnerRecord(),
+                            subjectLabel: $programName,
+                            metadata: [
+                                'total_items' => $total,
+                                'created_episodes' => $new,
+                                'updated_episodes' => $updated,
+                            ]
+                        );
+
                         \Filament\Notifications\Notification::make()
                             ->title('YouTube Senkronizasyonu Tamamlandı')
                             ->body($summary)
@@ -181,11 +213,45 @@ class EpisodesRelationManager extends RelationManager
                     ->mutateFormDataUsing(function (array $data): array {
                         $data['program_id'] = $this->getOwnerRecord()->getKey();
                         return $data;
+                    })
+                    ->after(function (Episode $record) {
+                        $userName = auth()->user()?->name ?? 'Kullanıcı';
+                        $programName = $record->program?->name ?? $this->getOwnerRecord()?->name ?? 'Program';
+                        $epNumber = $record->episode_number ?: 'Yeni';
+                        \App\Services\Audit\AuditLogger::log(
+                            action: 'created',
+                            message: "{$userName}, {$programName} {$epNumber}. Bölüm'ü ekledi.",
+                            subject: $record,
+                            subjectLabel: "{$programName} {$epNumber}. Bölüm",
+                        );
                     }),
             ])
             ->actions([
-                EditAction::make(),
-                DeleteAction::make(),
+                EditAction::make()
+                    ->after(function (Episode $record) {
+                        $userName = auth()->user()?->name ?? 'Kullanıcı';
+                        $programName = $record->program?->name ?? $this->getOwnerRecord()?->name ?? 'Program';
+                        $epNumber = $record->episode_number ?: 'Bölüm';
+                        \App\Services\Audit\AuditLogger::log(
+                            action: 'updated',
+                            message: "{$userName}, {$programName} {$epNumber}. Bölüm'ü düzenledi.",
+                            subject: $record,
+                            subjectLabel: "{$programName} {$epNumber}. Bölüm",
+                        );
+                    }),
+                DeleteAction::make()
+                    ->before(function (Episode $record) {
+                        $userName = auth()->user()?->name ?? 'Kullanıcı';
+                        $programName = $record->program?->name ?? $this->getOwnerRecord()?->name ?? 'Program';
+                        $epNumber = $record->episode_number ?: 'Bölüm';
+                        \App\Services\Audit\AuditLogger::log(
+                            action: 'deleted',
+                            message: "{$userName}, {$programName} {$epNumber}. Bölüm'ü sildi.",
+                            subject: $record,
+                            subjectLabel: "{$programName} {$epNumber}. Bölüm",
+                            isDestructive: true,
+                        );
+                    }),
             ])
             ->paginated([25, 50, 100])
             ->defaultPaginationPageOption(25);

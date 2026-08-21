@@ -41,13 +41,17 @@ class ProgramForm
                                 ]),
 
                                 Textarea::make('short_description')
-                                    ->label('Kısa Açıklama')
-                                    ->placeholder('Program listelerinde ve kartlarda görünecek kısa özet...')
+                                    ->label('Yayın Akışı Kısa Tanımı')
+                                    ->helperText('Yayın akışında program adının yanında veya altında gösterilen kısa tanıtım metni.')
+                                    ->placeholder('Yayın akışında görünecek kısa tanıtım metni...')
+                                    ->maxLength(160)
                                     ->rows(2)
                                     ->columnSpanFull(),
 
                                 Textarea::make('description')
-                                    ->label('Detaylı Açıklama')
+                                    ->label('Program Tanıtım Metni')
+                                    ->helperText('Program detay sayfasında ve uygun büyük tanıtım alanlarında gösterilen program açıklaması.')
+                                    ->placeholder('Program detay sayfasında görünecek detaylı tanıtım açıklaması...')
                                     ->rows(4)
                                     ->columnSpanFull(),
 
@@ -129,9 +133,10 @@ class ProgramForm
                                     ->placeholder('Boş bırakılırsa program adı kullanılır'),
 
                                 Textarea::make('meta_description')
-                                    ->label('Google Arama Açıklaması (Meta Description)')
+                                    ->label('SEO Açıklaması')
+                                    ->helperText('Google ve arama motorları için özel açıklama. Boş bırakılırsa Program Tanıtım Metni kullanılır.')
                                     ->rows(3)
-                                    ->placeholder('Programın Google arama sonuçlarında görünecek kısa özeti'),
+                                    ->placeholder('Programın Google arama sonuçlarında görünecek özel SEO özeti'),
                             ]),
 
                         Tab::make('Önizleme')

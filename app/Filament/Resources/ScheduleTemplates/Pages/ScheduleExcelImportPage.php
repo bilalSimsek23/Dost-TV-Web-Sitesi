@@ -47,11 +47,17 @@ class ScheduleExcelImportPage extends Page implements HasForms
 
     public int $error_count = 0;
 
+    public int $warning_count = 0;
+
     public bool $has_errors = false;
+
+    public bool $has_warnings = false;
 
     public ?string $general_error = null;
 
     public array $errorsList = [];
+
+    public array $warningsList = [];
 
     public array $days_summary = [];
 
@@ -146,9 +152,11 @@ class ScheduleExcelImportPage extends Page implements HasForms
         }
 
         $this->has_errors = $result['has_errors'] ?? false;
+        $this->has_warnings = $result['has_warnings'] ?? false;
         $this->total_count = $result['total_count'] ?? 0;
         $this->valid_count = $result['valid_count'] ?? 0;
         $this->error_count = $result['error_count'] ?? 0;
+        $this->warning_count = $result['warning_count'] ?? 0;
         $this->period_name = $result['period_name'] ?? null;
         $this->valid_from_raw = $result['valid_from'] ? $result['valid_from']->toDateString() : null;
         $this->valid_until_raw = $result['valid_until'] ? $result['valid_until']->toDateString() : null;
@@ -156,6 +164,7 @@ class ScheduleExcelImportPage extends Page implements HasForms
         $this->valid_until_formatted = $result['valid_until_formatted'] ?? null;
         $this->general_error = $result['general_error'] ?? null;
         $this->errorsList = $result['errors'] ?? [];
+        $this->warningsList = $result['warnings'] ?? [];
         $this->days_summary = $result['days_summary'] ?? [];
         $this->rows = $result['rows'] ?? [];
 
@@ -167,6 +176,12 @@ class ScheduleExcelImportPage extends Page implements HasForms
                 ->title("Excel dosyasında {$this->error_count} adet hata tespit edildi.")
                 ->body('Hataları aşağıdaki listeden inceleyip Excel dosyanızı düzelterek tekrar yükleyiniz.')
                 ->danger()
+                ->send();
+        } elseif ($this->warning_count > 0) {
+            Notification::make()
+                ->title("Kontrol tamamlandı: {$this->total_count} yayın satırı doğrulandı ({$this->warning_count} uyarı mevcut).")
+                ->body('Parantezli program açıklamaları normalize edilerek eşleştirildi. Yayın dönemini oluşturabilirsiniz.')
+                ->warning()
                 ->send();
         } else {
             Notification::make()
@@ -236,6 +251,18 @@ class ScheduleExcelImportPage extends Page implements HasForms
 
         $this->isImported = true;
         $this->isPreviewLoaded = false;
+
+        $userName = auth()->user()?->name ?? 'Kullanıcı';
+        \App\Services\Audit\AuditLogger::log(
+            action: 'imported',
+            message: "{$userName}, haftalık yayın akışını Excel'den aktardı.",
+            subject: ScheduleTemplate::find($this->createdTemplateId),
+            subjectLabel: $this->createdTemplateName,
+            metadata: [
+                'template_id' => $this->createdTemplateId,
+                'imported_items' => $this->importedItemsCount,
+            ]
+        );
 
         Notification::make()
             ->title("Yayın dönemi '{$this->createdTemplateName}' ve {$this->importedItemsCount} yayın satırı başarıyla oluşturuldu!")

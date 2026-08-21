@@ -132,6 +132,14 @@ class ScheduleTemplatesTable
                             ]);
                         });
 
+                        $userName = auth()->user()?->name ?? 'Kullanıcı';
+                        \App\Services\Audit\AuditLogger::log(
+                            action: 'activated',
+                            message: "{$userName}, {$record->name} dönemini aktifleştirdi.",
+                            subject: $record,
+                            subjectLabel: $record->name,
+                        );
+
                         Notification::make()
                             ->title('Yayın dönemi gösterime alındı.')
                             ->success()
@@ -142,7 +150,17 @@ class ScheduleTemplatesTable
                 DeleteAction::make()
                     ->label('Sil')
                     ->modalHeading('Bu yayın dönemini silmek istediğinize emin misiniz?')
-                    ->visible(fn (ScheduleTemplate $record) => ! $record->is_active),
+                    ->visible(fn (ScheduleTemplate $record) => ! $record->is_active)
+                    ->before(function (ScheduleTemplate $record) {
+                        $userName = auth()->user()?->name ?? 'Kullanıcı';
+                        \App\Services\Audit\AuditLogger::log(
+                            action: 'deleted',
+                            message: "{$userName}, {$record->name} dönemini sildi.",
+                            subject: $record,
+                            subjectLabel: $record->name,
+                            isDestructive: true,
+                        );
+                    }),
             ]);
     }
 }

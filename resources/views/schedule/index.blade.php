@@ -1,66 +1,236 @@
 @extends('layouts.app')
 
-@section('title', 'Yayın Akışı - Dost TV')
+@section('title', 'Haftalık Yayın Akışı - Dost TV')
+@section('description', 'Dost TV güncel televizyon yayın akış planı. Canlı ve tekrar yayınlanan tüm programların yayın saatleri.')
 
 @section('content')
-    <section class="mx-auto max-w-5xl px-4 py-16 sm:px-6 lg:px-8">
+    <section class="mx-auto max-w-5xl px-4 py-12 sm:px-6 lg:px-8"
+        x-data="{
+            selectedDay: {{ $defaultSelectedDay }},
+            todayDay: {{ $todayIndex }},
+            scrollCarousel(direction) {
+                const container = this.$refs.carousel;
+                if (container) {
+                    const scrollAmount = container.clientWidth * 0.75;
+                    container.scrollBy({ left: direction * scrollAmount, behavior: 'smooth' });
+                }
+            },
+            init() {
+                this.$nextTick(() => {
+                    // Center active day card in carousel on load
+                    const activeCard = document.getElementById('day-card-' + this.selectedDay);
+                    if (activeCard && this.$refs.carousel) {
+                        activeCard.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+                    }
+
+                    // Auto-scroll to 'now-playing' item on page load if today is viewed and no explicit hash
+                    if (this.selectedDay === this.todayDay && !window.location.hash) {
+                        const nowEl = document.getElementById('now-playing') || document.querySelector('[data-now-playing=\'true\']');
+                        if (nowEl) {
+                            const isReducedMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+                            setTimeout(() => {
+                                nowEl.scrollIntoView({
+                                    behavior: isReducedMotion ? 'auto' : 'smooth',
+                                    block: 'center'
+                                });
+                            }, 200);
+                        }
+                    }
+                });
+            }
+        }">
+
+        <!-- Page Header & Secondary Active Period Badge -->
         <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 border-b border-white/10 pb-6">
             <div>
-                <h1 class="text-3xl font-black text-white">Haftalık Yayın Akışı</h1>
-                <p class="mt-2 text-slate-400">Dost TV güncel televizyon yayın akış planı.</p>
+                <h1 class="text-3xl sm:text-4xl font-black tracking-tight text-white">Haftalık Yayın Akışı</h1>
+                <p class="mt-2 text-sm sm:text-base text-slate-400">Dost TV güncel televizyon yayın akış planı.</p>
             </div>
             @if ($activeTemplate)
-                <div class="inline-flex items-center gap-2 rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-2 text-sm text-rose-300">
+                <div class="self-start md:self-auto inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/[0.04] px-3.5 py-1.5 text-xs text-slate-300 backdrop-blur-md">
                     <span class="relative flex h-2 w-2">
-                      <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
-                      <span class="relative inline-flex rounded-full h-2 w-2 bg-rose-500"></span>
+                        <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
+                        <span class="relative inline-flex rounded-full h-2 w-2 bg-rose-500"></span>
                     </span>
-                    <span>Aktif Sezon: <strong>{{ $activeTemplate->name }}</strong> (v{{ $activeTemplate->version }})</span>
+                    <span class="text-slate-400">Aktif Dönem:</span>
+                    <strong class="text-white font-semibold">{{ $activeTemplate->name }}</strong>
                 </div>
             @endif
         </div>
 
-        <div class="mt-10 space-y-8">
-            @foreach ($days as $dayIndex => $dayName)
-                <div class="rounded-2xl border border-white/10 bg-white/[0.03] p-6 shadow-xl backdrop-blur-md">
-                    <h2 class="text-xl font-bold text-white flex items-center gap-2">
-                        <span class="inline-block w-2.5 h-2.5 rounded-full bg-rose-500"></span>
-                        {{ $dayName }}
-                    </h2>
-                    <ul class="mt-4 divide-y divide-white/5">
-                        @forelse ($scheduleByDay->get($dayIndex, collect()) as $item)
-                            <li class="flex flex-col sm:flex-row sm:items-center justify-between py-3.5 gap-2">
-                                <div class="flex items-center gap-3">
-                                    @if ($item->program)
-                                        <a href="{{ route('programs.show', $item->program) }}" class="font-semibold text-white hover:text-rose-400 transition-colors">
-                                            {{ $item->display_title ?? $item->program->name }}
-                                        </a>
-                                    @else
-                                        <span class="font-semibold text-white">{{ $item->display_title ?? 'Yayın' }}</span>
-                                    @endif
+        <!-- Day Selector Carousel (4 Visible on Desktop) -->
+        <div class="mt-8 relative group">
+            <!-- Left Arrow Button -->
+            <button type="button"
+                @click="scrollCarousel(-1)"
+                aria-label="Önceki Günler"
+                class="absolute -left-3 top-1/2 -translate-y-1/2 z-20 flex h-9 w-9 items-center justify-center rounded-full border border-white/15 bg-slate-900/90 text-white shadow-xl backdrop-blur-md transition-all hover:scale-110 hover:border-rose-500/50 hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-rose-500 hidden sm:flex">
+                <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M15 19l-7-7 7-7" />
+                </svg>
+            </button>
 
-                                    @if ($item->is_live)
-                                        <span class="rounded bg-red-600 px-2 py-0.5 text-xs font-bold uppercase tracking-wider text-white">CANLI</span>
-                                    @endif
+            <!-- Right Arrow Button -->
+            <button type="button"
+                @click="scrollCarousel(1)"
+                aria-label="Sonraki Günler"
+                class="absolute -right-3 top-1/2 -translate-y-1/2 z-20 flex h-9 w-9 items-center justify-center rounded-full border border-white/15 bg-slate-900/90 text-white shadow-xl backdrop-blur-md transition-all hover:scale-110 hover:border-rose-500/50 hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-rose-500 hidden sm:flex">
+                <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 5l7 7-7 7" />
+                </svg>
+            </button>
 
-                                    @if ($item->is_repeat)
-                                        <span class="rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 px-2 py-0.5 text-xs font-medium">TEKRAR</span>
-                                    @endif
-                                </div>
+            <!-- Horizontal Scrollable Container -->
+            <div x-ref="carousel"
+                class="flex gap-3 overflow-x-auto scroll-smooth py-2 px-1 snap-x snap-mandatory [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+                @foreach ($daysData as $day)
+                    <div id="day-card-{{ $day['index'] }}"
+                        @click="selectedDay = {{ $day['index'] }}"
+                        class="snap-start flex-shrink-0 cursor-pointer select-none rounded-2xl p-4 text-center transition-all duration-200 border
+                               w-[calc(50%-6px)] sm:w-[calc(33.333%-8px)] lg:w-[calc(25%-9px)]"
+                        :class="selectedDay === {{ $day['index'] }}
+                            ? 'border-rose-500/70 bg-gradient-to-b from-rose-500/20 to-rose-500/5 shadow-[0_0_20px_rgba(244,63,94,0.25)] ring-1 ring-rose-500/50 scale-[1.02]'
+                            : 'border-white/10 bg-white/[0.03] hover:border-white/20 hover:bg-white/[0.06] opacity-85 hover:opacity-100'">
 
-                                <span class="self-start sm:self-auto rounded-full bg-white/10 px-3.5 py-1 text-sm font-bold text-rose-300 tracking-wide border border-white/10">
-                                    {{ \Illuminate\Support\Carbon::parse($item->start_time)->format('H:i') }}
-                                    @if ($item->end_time)
-                                        - {{ \Illuminate\Support\Carbon::parse($item->end_time)->format('H:i') }}
-                                    @endif
+                        <!-- Day Header -->
+                        <div class="flex items-center justify-center gap-1.5 text-xs sm:text-sm font-semibold"
+                            :class="selectedDay === {{ $day['index'] }} ? 'text-rose-400 font-bold' : 'text-slate-400'">
+                            @if ($day['is_today'])
+                                <span class="flex h-2 w-2 relative">
+                                    <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
+                                    <span class="relative inline-flex rounded-full h-2 w-2 bg-rose-500"></span>
                                 </span>
-                            </li>
-                        @empty
-                            <li class="py-4 text-sm text-slate-500 italic">Bu gün için planlanmış yayın bulunmamaktadır.</li>
-                        @endforelse
-                    </ul>
+                            @endif
+                            <span>{{ $day['day_name'] }}</span>
+                        </div>
+
+                        <!-- Date Label -->
+                        <div class="mt-1 text-base sm:text-lg font-bold text-white tracking-tight">
+                            {{ $day['date_label'] }}
+                        </div>
+
+                        <!-- Today Badge -->
+                        @if ($day['is_today'])
+                            <div class="mt-1.5 inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider"
+                                :class="selectedDay === {{ $day['index'] }} ? 'bg-rose-500 text-white' : 'bg-white/10 text-rose-300'">
+                                Bugün
+                            </div>
+                        @endif
+                    </div>
+                @endforeach
+            </div>
+        </div>
+
+        <!-- Broadcast Stream List for Selected Day -->
+        <div class="mt-8">
+            @foreach ($daysData as $day)
+                <div x-show="selectedDay === {{ $day['index'] }}"
+                    x-transition:enter="transition ease-out duration-200"
+                    x-transition:enter-start="opacity-0 translate-y-2"
+                    x-transition:enter-end="opacity-100 translate-y-0"
+                    style="display: none;"
+                    class="rounded-2xl border border-white/10 bg-white/[0.02] p-4 sm:p-6 backdrop-blur-xl shadow-2xl">
+
+                    <!-- Day Title Bar -->
+                    <div class="flex items-center justify-between border-b border-white/10 pb-4 mb-4">
+                        <div class="flex items-center gap-2.5">
+                            <span class="inline-block w-2.5 h-2.5 rounded-full {{ $day['is_today'] ? 'bg-rose-500 animate-pulse' : 'bg-slate-400' }}"></span>
+                            <h2 class="text-lg sm:text-xl font-bold text-white flex items-center gap-2">
+                                {{ $day['day_name'] }}
+                                <span class="text-sm font-normal text-slate-400">· {{ $day['date_label'] }}</span>
+                            </h2>
+                        </div>
+                        <span class="text-xs sm:text-sm font-medium text-slate-400">
+                            {{ $day['broadcasts']->count() }} Yayın
+                        </span>
+                    </div>
+
+                    @if ($day['broadcasts']->isEmpty())
+                        <div class="py-12 text-center">
+                            <p class="text-base font-semibold text-slate-300">Bu gün için planlanmış yayın bulunmamaktadır.</p>
+                            <p class="mt-1 text-sm text-slate-500">Lütfen diğer günlerin akışını kontrol ediniz.</p>
+                        </div>
+                    @else
+                        <div class="divide-y divide-white/5 space-y-1">
+                            @foreach ($day['broadcasts'] as $bIndex => $item)
+                                @php
+                                    $isNowPlaying = $day['is_today'] && ($day['now_playing_index'] === $bIndex);
+                                    $isNextUpcoming = $day['is_today'] && ($day['now_playing_index'] === null) && ($day['next_upcoming_index'] === $bIndex);
+                                    $startTimeFormatted = \Illuminate\Support\Carbon::parse($item->start_time)->format('H:i');
+                                    $endTimeFormatted = $item->end_time ? \Illuminate\Support\Carbon::parse($item->end_time)->format('H:i') : null;
+                                @endphp
+
+                                <div @if($isNowPlaying) id="now-playing" data-now-playing="true" @elseif($isNextUpcoming) data-next-upcoming="true" @endif
+                                    class="group flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-6 py-3.5 px-3 sm:px-4 rounded-xl transition-all duration-200 scroll-mt-28
+                                           {{ $isNowPlaying
+                                                ? 'bg-rose-500/[0.12] border border-rose-500/40 shadow-[0_0_25px_rgba(244,63,94,0.18)] ring-1 ring-rose-500/30 my-2'
+                                                : 'hover:bg-white/[0.04] border border-transparent' }}">
+
+                                    <!-- Time Column (Left): Natural on mobile, fixed width on desktop -->
+                                    <div class="w-auto sm:w-28 sm:min-w-[7rem] flex-shrink-0 sm:border-r sm:border-white/10 sm:pr-4">
+                                        <div class="flex items-baseline gap-1 font-mono tracking-tight {{ $isNowPlaying ? 'text-rose-400 font-extrabold text-base sm:text-lg' : 'text-slate-300 font-bold text-sm sm:text-base' }}">
+                                            <span>{{ $startTimeFormatted }}</span>
+                                            @if ($endTimeFormatted)
+                                                <span class="text-xs text-slate-500 font-normal">- {{ $endTimeFormatted }}</span>
+                                            @endif
+                                        </div>
+                                    </div>
+
+                                    <!-- Program Info Column (Right): flex-1 min-w-0 -->
+                                    <div class="flex-1 min-w-0 flex flex-col sm:flex-row sm:items-center justify-between gap-2 w-full">
+                                        <div class="min-w-0 flex flex-col gap-0.5">
+                                            <div class="min-w-0 flex items-center flex-wrap gap-2">
+                                                @if ($isNowPlaying)
+                                                    <span class="flex-shrink-0 inline-flex items-center gap-1 rounded-full bg-rose-500 px-2.5 py-0.5 text-xs font-black uppercase tracking-wider text-white shadow-[0_0_10px_rgba(244,63,94,0.6)]">
+                                                        <span class="h-1.5 w-1.5 rounded-full bg-white animate-pulse"></span>
+                                                        ŞİMDİ
+                                                    </span>
+                                                @endif
+
+                                                @if ($item->program)
+                                                    <a href="{{ route('programs.show', $item->program) }}"
+                                                        class="text-base font-bold tracking-tight text-white hover:text-rose-400 transition-colors {{ $isNowPlaying ? 'text-rose-100' : '' }}">
+                                                        {{ $item->display_title ?? $item->program->name }}
+                                                    </a>
+                                                @else
+                                                    <span class="text-base font-bold tracking-tight text-white {{ $isNowPlaying ? 'text-rose-100' : '' }}">
+                                                        {{ $item->display_title ?? 'Özel Yayın' }}
+                                                    </span>
+                                                @endif
+
+                                                @if ($item->is_live)
+                                                    <span class="flex-shrink-0 rounded bg-red-600 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white">
+                                                        CANLI
+                                                    </span>
+                                                @endif
+
+                                                @if ($item->is_repeat)
+                                                    <span class="flex-shrink-0 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 px-2 py-0.5 text-[10px] font-medium">
+                                                        TEKRAR
+                                                    </span>
+                                                @endif
+                                            </div>
+
+                                            @if (!empty($item->program?->short_description))
+                                                <p class="text-xs text-slate-400 leading-relaxed line-clamp-2 {{ $isNowPlaying ? 'text-rose-200/80' : '' }}">
+                                                    {{ $item->program->short_description }}
+                                                </p>
+                                            @endif
+                                        </div>
+
+                                        @if (!empty($item->note))
+                                            <span class="flex-shrink-0 text-xs text-slate-400 italic">
+                                                {{ $item->note }}
+                                            </span>
+                                        @endif
+                                    </div>
+                                </div>
+                            @endforeach
+                        </div>
+                    @endif
                 </div>
             @endforeach
         </div>
     </section>
 @endsection
+

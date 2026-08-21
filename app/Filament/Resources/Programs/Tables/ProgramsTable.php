@@ -66,7 +66,7 @@ class ProgramsTable
                         $newPublic = ! $record->show_on_public;
                         $record->update([
                             'show_on_public' => $newPublic,
-                            'is_active' => $newPublic && $record->status === 'active',
+                            'is_active' => $newPublic && in_array($record->status, ['active', 'season_break'], true),
                         ]);
                         Notification::make()
                             ->title("{$record->name} " . ($newPublic ? 'yayına alındı (Yayında).' : 'pasife alındı (Pasif).'))
@@ -129,6 +129,15 @@ class ProgramsTable
                             'show_on_public' => false,
                             'is_active' => false,
                         ]);
+
+                        $userName = auth()->user()?->name ?? 'Kullanıcı';
+                        \App\Services\Audit\AuditLogger::log(
+                            action: 'archived',
+                            message: "{$userName}, {$record->name} programını arşivledi.",
+                            subject: $record,
+                            subjectLabel: $record->name,
+                        );
+
                         Notification::make()
                             ->title("{$record->name} yönetim arşivine alındı.")
                             ->warning()
@@ -146,6 +155,15 @@ class ProgramsTable
                             'show_on_public' => true,
                             'is_active' => true,
                         ]);
+
+                        $userName = auth()->user()?->name ?? 'Kullanıcı';
+                        \App\Services\Audit\AuditLogger::log(
+                            action: 'restored',
+                            message: "{$userName}, {$record->name} programını arşivden çıkardı.",
+                            subject: $record,
+                            subjectLabel: $record->name,
+                        );
+
                         Notification::make()
                             ->title("{$record->name} yönetim arşivinden çıkarıldı.")
                             ->success()
@@ -154,7 +172,17 @@ class ProgramsTable
 
                 DeleteAction::make()
                     ->requiresConfirmation()
-                    ->visible(fn (Program $record) => $record->episodes()->count() === 0 && $record->schedules()->count() === 0),
+                    ->visible(fn (Program $record) => $record->episodes()->count() === 0 && $record->schedules()->count() === 0)
+                    ->before(function (Program $record) {
+                        $userName = auth()->user()?->name ?? 'Kullanıcı';
+                        \App\Services\Audit\AuditLogger::log(
+                            action: 'deleted',
+                            message: "{$userName}, {$record->name} programını kalıcı olarak sildi.",
+                            subject: $record,
+                            subjectLabel: $record->name,
+                            isDestructive: true,
+                        );
+                    }),
             ]);
     }
 

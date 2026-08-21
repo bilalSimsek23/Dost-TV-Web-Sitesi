@@ -40,5 +40,12 @@ Route::middleware(['web', 'auth'])->group(function () {
     })->name('schedule.excel.errors');
 });
 
+use App\Http\Controllers\Auth\InvitationController;
+
+Route::middleware(['web', 'throttle:10,1'])->group(function () {
+    Route::get('/davet/{token}', [InvitationController::class, 'show'])->name('invitation.accept');
+    Route::post('/davet/{token}', [InvitationController::class, 'accept'])->name('invitation.accept.post');
+});
+
 // Statik sayfalar (İletişim, Hakkımızda, Yayın İlkeleri vb.) - en sonda, catch-all olarak
 Route::get('/{page:slug}', [PageController::class, 'show'])->name('pages.show');

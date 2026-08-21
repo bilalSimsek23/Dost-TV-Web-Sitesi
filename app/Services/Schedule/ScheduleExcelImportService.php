@@ -72,7 +72,7 @@ class ScheduleExcelImportService
     {
         $spreadsheet = new Spreadsheet();
 
-        // 1. Data Sheet (Programlar & Yayın Türleri for Dropdowns)
+        // 1. Data Sheet (Programlar, Yayın Türleri & Hızlı Süre Seçenekleri)
         $dataSheet = $spreadsheet->createSheet();
         $dataSheet->setTitle('Programlar');
 
@@ -131,19 +131,44 @@ class ScheduleExcelImportService
         $sheet->getStyle('A3')->applyFromArray($metaStyleLabel);
         $sheet->getStyle('B3')->getFont()->setBold(true);
 
+        // Real Excel DATE serial with dd.mm.yyyy format
+        $firstDayOfMonth = \PhpOffice\PhpSpreadsheet\Shared\Date::PHPToExcel(new \DateTime(date('Y-m-01')));
+        $lastDayOfYear = \PhpOffice\PhpSpreadsheet\Shared\Date::PHPToExcel(new \DateTime(date('Y-12-31')));
+
         $sheet->setCellValue('A4', 'Başlangıç Tarihi *');
-        $sheet->setCellValue('B4', date('01.m.Y'));
+        $sheet->setCellValue('B4', $firstDayOfMonth);
         $sheet->setCellValue('C4', '(Format: GG.AA.YYYY)');
         $sheet->getStyle('A4')->applyFromArray($metaStyleLabel);
+        $sheet->getStyle('B4')->getNumberFormat()->setFormatCode('dd.mm.yyyy');
         $sheet->getStyle('C4')->getFont()->setColor(new \PhpOffice\PhpSpreadsheet\Style\Color('64748B'))->setSize(9);
 
         $sheet->setCellValue('A5', 'Bitiş Tarihi *');
-        $sheet->setCellValue('B5', date('31.12.Y'));
+        $sheet->setCellValue('B5', $lastDayOfYear);
         $sheet->setCellValue('C5', '(Format: GG.AA.YYYY)');
         $sheet->getStyle('A5')->applyFromArray($metaStyleLabel);
+        $sheet->getStyle('B5')->getNumberFormat()->setFormatCode('dd.mm.yyyy');
         $sheet->getStyle('C5')->getFont()->setColor(new \PhpOffice\PhpSpreadsheet\Style\Color('64748B'))->setSize(9);
 
         $sheet->getStyle('A3:B5')->getBorders()->getAllBorders()->setBorderStyle(Border::BORDER_THIN);
+
+        // Quick Usage & Copy Guidance Panel (D3:E5)
+        $sheet->mergeCells('D3:E5');
+        $guideText = "💡 HIZLI KULLANIM & SAATLERİ KOPYALAMA REHBERİ\n" .
+                     "• Tarih: GG.AA.YYYY formatında korunur (01.04.2026 gibi).\n" .
+                     "• Saatler: Başlangıç ve Bitiş saatlerini yazın (örn: 08:37).\n" .
+                     "• Otomatik Devam: Sonraki satırın başlangıcı önceki satırın bitişini alır.\n" .
+                     "• Saat Kopyalama: Bir günün saatlerini seçip kopyalayarak (Ctrl+C) diğer güne yapıştırabilirsiniz (Ctrl+V).";
+        $sheet->setCellValue('D3', $guideText);
+        $sheet->getStyle('D3:E5')->applyFromArray([
+            'font' => ['size' => 8.5, 'color' => ['rgb' => '334155']],
+            'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => 'F1F5F9']],
+            'alignment' => [
+                'horizontal' => Alignment::HORIZONTAL_LEFT,
+                'vertical' => Alignment::VERTICAL_TOP,
+                'wrapText' => true,
+            ],
+            'borders' => ['allBorders' => ['borderStyle' => Border::BORDER_THIN, 'color' => ['rgb' => 'CBD5E1']]],
+        ]);
 
         // Days Sections
         $currentRow = 7;
@@ -185,14 +210,18 @@ class ScheduleExcelImportService
             // 25 Ready Rows per day
             for ($r = $startDataRow; $r <= $endDataRow; $r++) {
                 if ($r === $startDataRow) {
-                    $sheet->setCellValueExplicit("A{$r}", '00:00', \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                    $sheet->setCellValue("A{$r}", 0);
                 } else {
-                    $sheet->setCellValue("A{$r}", '=IF(B' . ($r - 1) . '<>"";B' . ($r - 1) . ';"")');
+                    $sheet->setCellValue("A{$r}", '=IF(B' . ($r - 1) . '<>"", B' . ($r - 1) . ', "")');
                 }
 
-                // Default time format
-                $sheet->getStyle("A{$r}:B{$r}")->getNumberFormat()->setFormatCode('@');
-                $sheet->getStyle("A{$r}:B{$r}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+                // Time number format for Start Time
+                $sheet->getStyle("A{$r}")->getNumberFormat()->setFormatCode('hh:mm');
+                $sheet->getStyle("A{$r}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+
+                // Bitiş (End Time) formatted as hh:mm for direct manual entry
+                $sheet->getStyle("B{$r}")->getNumberFormat()->setFormatCode('hh:mm');
+                $sheet->getStyle("B{$r}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
 
                 // Program Dropdown
                 $progValidation = $sheet->getCell("C{$r}")->getDataValidation();
@@ -202,7 +231,7 @@ class ScheduleExcelImportService
                 $progValidation->setShowDropDown(true);
                 $progValidation->setFormula1('Programlar!$A$1:$A$' . $totalPrograms);
 
-                // Yayın Türü Dropdown
+                // Yayın Türü Dropdown (CANLI, TEKRAR, PAKET)
                 $typeValidation = $sheet->getCell("D{$r}")->getDataValidation();
                 $typeValidation->setType(DataValidation::TYPE_LIST);
                 $typeValidation->setErrorStyle(DataValidation::STYLE_INFORMATION);
@@ -221,7 +250,7 @@ class ScheduleExcelImportService
         $sheet->getColumnDimension('B')->setWidth(14);
         $sheet->getColumnDimension('C')->setWidth(36);
         $sheet->getColumnDimension('D')->setWidth(18);
-        $sheet->getColumnDimension('E')->setWidth(30);
+        $sheet->getColumnDimension('E')->setWidth(26);
 
         $tempDir = sys_get_temp_dir();
         $filePath = $tempDir . '/DOST_TV_Yayin_Akisi_Sablonu_' . uniqid() . '.xlsx';
@@ -415,6 +444,8 @@ class ScheduleExcelImportService
         $currentDay = null;
         $dayRows = []; // [day_of_week => [rows]]
         $allProcessedRows = [];
+        $warnings = [];
+        $hasDurationColumn = false;
 
         foreach ($data as $rowNum => $row) {
             $colA = trim((string) ($row['A'] ?? ''));
@@ -422,6 +453,7 @@ class ScheduleExcelImportService
             $colC = trim((string) ($row['C'] ?? ''));
             $colD = trim((string) ($row['D'] ?? ''));
             $colE = trim((string) ($row['E'] ?? ''));
+            $colF = trim((string) ($row['F'] ?? ''));
 
             // Check if this row is a day header
             $normA = $this->normalizeString($colA);
@@ -430,8 +462,19 @@ class ScheduleExcelImportService
                 continue;
             }
 
-            // Skip column headers (Başlangıç, Bitiş, Program...) or top metadata rows
-            if (str_contains($normA, 'baslangic') || str_contains($normA, 'start') || str_contains($normA, 'akis') || str_contains($normA, 'dost tv') || str_contains($normA, 'donem')) {
+            // Check if this is a column header row
+            if (str_contains($normA, 'baslangic') || str_contains($normA, 'start')) {
+                $normB = $this->normalizeString($colB);
+                if (str_contains($normB, 'sure') || str_contains($normB, 'duration')) {
+                    $hasDurationColumn = true;
+                } elseif (str_contains($normB, 'bitis') || str_contains($normB, 'end')) {
+                    $hasDurationColumn = false;
+                }
+                continue;
+            }
+
+            // Skip metadata or info headers
+            if (str_contains($normA, 'akis') || str_contains($normA, 'dost tv') || str_contains($normA, 'donem')) {
                 continue;
             }
 
@@ -444,24 +487,62 @@ class ScheduleExcelImportService
                 continue;
             }
 
-            // Row is not empty; validate data
-            $rawStart = $colA;
-            $rawEnd = $colB;
-            $rawProgram = $colC;
-            $rawType = $colD ?: 'Normal';
-            $rawNote = $colE;
+            // Extract row based on layout (with or without duration column)
+            if ($hasDurationColumn) {
+                $rawStart = $colA;
+                $rawDuration = $colB;
+                $rawEnd = $colC;
+                $rawProgram = $colD;
+                $rawType = $colE ?: 'Normal';
+                $rawNote = $colF;
+            } else {
+                $rawStart = $colA;
+                $rawDuration = null;
+                $rawEnd = $colB;
+                $rawProgram = $colC;
+                $rawType = $colD ?: 'Normal';
+                $rawNote = $colE;
+            }
+
+            // Ignore unused template placeholder rows (e.g. formula start 00:00 but no end, program or duration)
+            if (empty($rawEnd) && empty($rawProgram) && empty($rawDuration)) {
+                continue;
+            }
 
             $rowErrors = [];
+            $rowWarnings = [];
+
+            // Calculate end time from duration if end time is missing but duration and start are given
+            $startTimeFormatted = $this->formatTime($rawStart);
+            $endTimeFormatted = $this->formatTime($rawEnd);
+
+            if (! $endTimeFormatted && ! empty($rawDuration) && $startTimeFormatted) {
+                $durationMinutes = match (trim($rawDuration)) {
+                    '+15 dk', '15 dk', '15m', '15' => 15,
+                    '+30 dk', '30 dk', '30m', '30' => 30,
+                    '+45 dk', '45 dk', '45m', '45' => 45,
+                    '+1 saat', '1 saat', '1s', '60 dk', '60' => 60,
+                    '+1.5 saat', '1.5 saat', '90 dk', '90' => 90,
+                    '+2 saat', '2 saat', '120 dk', '120' => 120,
+                    default => null,
+                };
+
+                if ($durationMinutes !== null) {
+                    try {
+                        $cStart = Carbon::createFromFormat('H:i', $startTimeFormatted);
+                        $cEnd = $cStart->copy()->addMinutes($durationMinutes);
+                        $endTimeFormatted = $cEnd->format('H:i');
+                        $rawEnd = $endTimeFormatted;
+                    } catch (\Throwable $e) {
+                    }
+                }
+            }
 
             // Partially filled check
             $filledFieldsCount = (! empty($rawStart) ? 1 : 0) + (! empty($rawEnd) ? 1 : 0) + (! empty($rawProgram) ? 1 : 0);
             if ($filledFieldsCount > 0 && $filledFieldsCount < 3) {
                 $rowErrors[] = 'Satır eksik doldurulmuş. Başlangıç, Bitiş ve Program alanları zorunludur.';
             }
-
-            // Format times
-            $startTimeFormatted = $this->formatTime($rawStart);
-            $endTimeFormatted = $this->formatTime($rawEnd);
 
             if (! $startTimeFormatted && ! empty($rawStart)) {
                 $rowErrors[] = "Geçersiz başlangıç saati: '{$rawStart}'";
@@ -484,16 +565,21 @@ class ScheduleExcelImportService
                 }
             }
 
-            // Match Program
+            // Match Program (Tolerant with resolveProgram)
             $matchedProgram = null;
             if (empty($rawProgram)) {
                 if ($filledFieldsCount > 0) {
                     $rowErrors[] = 'Program adı zorunludur.';
                 }
             } else {
-                $matchedProgram = $this->findProgram($rawProgram, $programLookup);
-                if (! $matchedProgram) {
-                    $rowErrors[] = "Program sistemde bulunamadı: '{$rawProgram}'";
+                $resolution = $this->resolveProgram($rawProgram, $programLookup);
+                if ($resolution['program']) {
+                    $matchedProgram = $resolution['program'];
+                    if (! empty($resolution['warning'])) {
+                        $rowWarnings[] = $resolution['warning'];
+                    }
+                } else {
+                    $rowErrors[] = $resolution['error'] ?? "Program sistemde bulunamadı: '{$rawProgram}'";
                 }
             }
 
@@ -508,7 +594,14 @@ class ScheduleExcelImportService
             }
 
             $finalNote = filled($rawNote) ? $rawNote : ($broadcastConfig['note'] ?? null);
-            $status = empty($rowErrors) ? 'ready' : 'error';
+
+            if (! empty($rowErrors)) {
+                $status = 'error';
+            } elseif (! empty($rowWarnings)) {
+                $status = 'warning';
+            } else {
+                $status = 'ready';
+            }
 
             $rowResult = [
                 'row_num' => $rowNum,
@@ -530,10 +623,23 @@ class ScheduleExcelImportService
                 'is_overnight' => $isOvernight,
                 'status' => $status,
                 'errors' => $rowErrors,
+                'warnings' => $rowWarnings,
             ];
 
             $dayRows[$currentDay][] = $rowResult;
             $allProcessedRows[] = $rowResult;
+
+            if (! empty($rowWarnings)) {
+                foreach ($rowWarnings as $warn) {
+                    $warnings[] = [
+                        'row_num' => "Satır {$rowNum} (" . self::DAYS_ORDERED[$currentDay] . ")",
+                        'program_name' => $rawProgram ?: '-',
+                        'matched_program' => $matchedProgram?->name ?? '-',
+                        'message' => $warn,
+                        'type' => 'WARNING',
+                    ];
+                }
+            }
 
             if (! empty($rowErrors)) {
                 foreach ($rowErrors as $err) {
@@ -541,6 +647,7 @@ class ScheduleExcelImportService
                         'row_num' => "Satır {$rowNum} (" . self::DAYS_ORDERED[$currentDay] . ")",
                         'program_name' => $rawProgram ?: '-',
                         'message' => $err,
+                        'type' => 'ERROR',
                     ];
                 }
             }
@@ -558,6 +665,7 @@ class ScheduleExcelImportService
                     'row_num' => $dayName,
                     'program_name' => '-',
                     'message' => $msg,
+                    'type' => 'ERROR',
                 ];
                 $dayErrors[] = $msg;
                 $daysSummary[$dayIndex] = [
@@ -577,6 +685,7 @@ class ScheduleExcelImportService
                     'row_num' => "Satır {$firstRow['row_num']} ({$dayName})",
                     'program_name' => $firstRow['program_name'],
                     'message' => $msg,
+                    'type' => 'ERROR',
                 ];
                 $dayErrors[] = $msg;
             }
@@ -597,6 +706,7 @@ class ScheduleExcelImportService
                         'row_num' => "Satır {$next['row_num']} ({$dayName})",
                         'program_name' => $next['program_name'],
                         'message' => $msg,
+                        'type' => 'ERROR',
                     ];
                     $dayErrors[] = $msg;
                     break;
@@ -608,6 +718,7 @@ class ScheduleExcelImportService
                         'row_num' => "Satır {$next['row_num']} ({$dayName})",
                         'program_name' => $next['program_name'],
                         'message' => $msg,
+                        'type' => 'ERROR',
                     ];
                     $dayErrors[] = $msg;
                 } elseif ($next['start_time'] < $curr['end_time']) {
@@ -616,6 +727,7 @@ class ScheduleExcelImportService
                         'row_num' => "Satır {$next['row_num']} ({$dayName})",
                         'program_name' => $next['program_name'],
                         'message' => $msg,
+                        'type' => 'ERROR',
                     ];
                     $dayErrors[] = $msg;
                 }
@@ -632,6 +744,7 @@ class ScheduleExcelImportService
                     'row_num' => "Satır {$lastRow['row_num']} ({$dayName})",
                     'program_name' => $lastRow['program_name'],
                     'message' => $msg,
+                    'type' => 'ERROR',
                 ];
                 $dayErrors[] = $msg;
             }
@@ -645,15 +758,19 @@ class ScheduleExcelImportService
         }
 
         $hasErrors = count($errors) > 0;
+        $hasWarnings = count($warnings) > 0;
         $totalCount = count($allProcessedRows);
-        $validCount = $hasErrors ? 0 : $totalCount;
+        $validCount = $hasErrors ? 0 : count(array_filter($allProcessedRows, fn ($r) => in_array($r['status'], ['ready', 'warning'], true)));
         $errorCount = count($errors);
+        $warningCount = count($warnings);
 
         return [
             'has_errors' => $hasErrors,
+            'has_warnings' => $hasWarnings,
             'total_count' => $totalCount,
             'valid_count' => $validCount,
             'error_count' => $errorCount,
+            'warning_count' => $warningCount,
             'period_name' => $periodName,
             'valid_from' => $validFrom,
             'valid_until' => $validUntil,
@@ -663,6 +780,7 @@ class ScheduleExcelImportService
             'days_summary' => $daysSummary,
             'rows' => $allProcessedRows,
             'errors' => $errors,
+            'warnings' => $warnings,
         ];
     }
 
@@ -705,20 +823,20 @@ class ScheduleExcelImportService
                         'row_num' => 1,
                         'program_name' => '-',
                         'message' => 'Zorunlu sütunlar eksik: ' . implode(', ', $missingHeaders),
+                        'type' => 'ERROR',
                     ],
                 ],
+                'warnings' => [],
             ];
         }
 
         $processedRows = [];
         $errors = [];
+        $warnings = [];
         $seenKeys = [];
-        $daySchedules = [];
-
         $rowNum = 1;
         foreach ($data as $rawRow) {
             $rowNum++;
-
             if ($this->isEmptyRow($rawRow)) {
                 continue;
             }
@@ -731,6 +849,7 @@ class ScheduleExcelImportService
             $rawActive = trim((string) ($rawRow[$colMap['is_active'] ?? ''] ?? 'Evet'));
 
             $rowErrors = [];
+            $rowWarnings = [];
 
             $dayOfWeek = $this->parseDayOfWeek($rawDay);
             if ($dayOfWeek === null) {
@@ -761,9 +880,14 @@ class ScheduleExcelImportService
             if (empty($rawProgram)) {
                 $rowErrors[] = 'Program adı zorunludur.';
             } else {
-                $matchedProgram = $this->findProgram($rawProgram, $programLookup);
-                if (! $matchedProgram) {
-                    $rowErrors[] = "Bu program sistemde bulunamadı: '{$rawProgram}'";
+                $resolution = $this->resolveProgram($rawProgram, $programLookup);
+                if ($resolution['program']) {
+                    $matchedProgram = $resolution['program'];
+                    if (! empty($resolution['warning'])) {
+                        $rowWarnings[] = $resolution['warning'];
+                    }
+                } else {
+                    $rowErrors[] = $resolution['error'] ?? "Bu program sistemde bulunamadı: '{$rawProgram}'";
                 }
             }
 
@@ -803,7 +927,7 @@ class ScheduleExcelImportService
                 }
             }
 
-            $status = empty($rowErrors) ? 'ready' : 'error';
+            $status = empty($rowErrors) ? (empty($rowWarnings) ? 'ready' : 'warning') : 'error';
 
             $rowResult = [
                 'row_num' => $rowNum,
@@ -825,31 +949,43 @@ class ScheduleExcelImportService
                 'is_active' => $isActive,
                 'status' => $status,
                 'errors' => $rowErrors,
+                'warnings' => $rowWarnings,
             ];
 
             $processedRows[] = $rowResult;
+
+            if (! empty($rowWarnings)) {
+                foreach ($rowWarnings as $warn) {
+                    $warnings[] = [
+                        'row_num' => $rowNum,
+                        'program_name' => $rawProgram ?: '-',
+                        'matched_program' => $matchedProgram?->name ?? '-',
+                        'message' => $warn,
+                        'type' => 'WARNING',
+                    ];
+                }
+            }
 
             if (! empty($rowErrors)) {
                 foreach ($rowErrors as $err) {
                     $errors[] = [
                         'row_num' => $rowNum,
                         'program_name' => $rawProgram ?: '-',
+                        'matched_program' => $matchedProgram?->name ?? '-',
                         'message' => $err,
+                        'type' => 'ERROR',
                     ];
                 }
             }
         }
 
-        $hasErrors = count($errors) > 0;
-        $totalCount = count($processedRows);
-        $validCount = count(array_filter($processedRows, fn ($r) => $r['status'] === 'ready'));
-        $errorCount = count(array_filter($processedRows, fn ($r) => $r['status'] === 'error'));
-
         return [
-            'has_errors' => $hasErrors,
-            'total_count' => $totalCount,
-            'valid_count' => $validCount,
-            'error_count' => $errorCount,
+            'has_errors' => count($errors) > 0,
+            'has_warnings' => count($warnings) > 0,
+            'total_count' => count($processedRows),
+            'valid_count' => count(array_filter($processedRows, fn ($r) => in_array($r['status'], ['ready', 'warning'], true))),
+            'error_count' => count($errors),
+            'warning_count' => count($warnings),
             'period_name' => null,
             'valid_from' => null,
             'valid_until' => null,
@@ -858,6 +994,7 @@ class ScheduleExcelImportService
             'days_summary' => [],
             'rows' => $processedRows,
             'errors' => $errors,
+            'warnings' => $warnings,
         ];
     }
 
@@ -870,7 +1007,7 @@ class ScheduleExcelImportService
             $createdCount = 0;
 
             foreach ($validRows as $row) {
-                if (($row['status'] ?? '') !== 'ready' && ! empty($row['errors'] ?? [])) {
+                if (! in_array($row['status'] ?? '', ['ready', 'warning'], true) || ! empty($row['errors'] ?? [])) {
                     continue;
                 }
 
@@ -895,43 +1032,59 @@ class ScheduleExcelImportService
     }
 
     /**
-     * Generates error Excel report file for downloadable errors.
+     * Generates error & warning Excel report file for downloadable errors.
      */
-    public function generateErrorExport(array $errors): string
+    public function generateErrorExport(array $errors, array $warnings = []): string
     {
         $spreadsheet = new Spreadsheet();
         $sheet = $spreadsheet->getActiveSheet();
-        $sheet->setTitle('İçe Aktarma Hataları');
+        $sheet->setTitle('İçe Aktarma Raporu');
 
-        $headers = ['Excel Satır No', 'Program Adı', 'Hata Açıklaması'];
+        $headers = ['Tür', 'Excel Satır No', 'Program Adı', 'Eşleşen Program', 'Açıklama'];
         $sheet->fromArray([$headers], null, 'A1');
 
         $headerStyle = [
             'font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF']],
             'fill' => [
                 'fillType' => Fill::FILL_SOLID,
-                'startColor' => ['rgb' => 'DC2626'],
+                'startColor' => ['rgb' => '1E293B'],
             ],
         ];
-        $sheet->getStyle('A1:C1')->applyFromArray($headerStyle);
+        $sheet->getStyle('A1:E1')->applyFromArray($headerStyle);
 
         $exportData = [];
         foreach ($errors as $err) {
             $exportData[] = [
+                'HATA',
                 $err['row_num'] ?? '-',
                 $err['program_name'] ?? '-',
+                $err['matched_program'] ?? '-',
                 $err['message'] ?? '-',
             ];
         }
 
+        foreach ($warnings as $warn) {
+            $exportData[] = [
+                'UYARI',
+                $warn['row_num'] ?? '-',
+                $warn['program_name'] ?? '-',
+                $warn['matched_program'] ?? '-',
+                $warn['message'] ?? '-',
+            ];
+        }
+
+        if (empty($exportData)) {
+            $exportData[] = ['BİLGİ', '-', '-', '-', 'Herhangi bir hata veya uyarı bulunamadı.'];
+        }
+
         $sheet->fromArray($exportData, null, 'A2');
 
-        foreach (range('A', 'C') as $col) {
+        foreach (range('A', 'E') as $col) {
             $sheet->getColumnDimension($col)->setAutoSize(true);
         }
 
         $tempDir = sys_get_temp_dir();
-        $filePath = $tempDir . '/Yayın_Akışı_İçe_Aktarma_Hataları_' . uniqid() . '.xlsx';
+        $filePath = $tempDir . '/Yayın_Akışı_İçe_Aktarma_Raporu_' . uniqid() . '.xlsx';
 
         $writer = new Xlsx($spreadsheet);
         $writer->save($filePath);
@@ -966,21 +1119,27 @@ class ScheduleExcelImportService
         }
 
         if ($rawDate instanceof \DateTimeInterface) {
-            return Carbon::instance($rawDate);
+            return Carbon::instance($rawDate)->startOfDay();
         }
 
         // Handle Excel numeric date serial (e.g. 46266 for 2026-09-01)
         if (is_numeric($rawDate) && (float) $rawDate > 1000) {
             try {
-                $unixDate = ($rawDate - 25569) * 86400;
-                return Carbon::createFromTimestampUTC((int) $unixDate);
+                $dt = \PhpOffice\PhpSpreadsheet\Shared\Date::excelToDateTimeObject((float) $rawDate);
+                return Carbon::instance($dt)->startOfDay();
             } catch (\Throwable $e) {
-                // fallback to string parse
+                // fallback to timestamp conversion
+                try {
+                    $unixDate = ($rawDate - 25569) * 86400;
+                    return Carbon::createFromTimestampUTC((int) $unixDate)->startOfDay();
+                } catch (\Throwable $e2) {
+                    // fallback to string parse
+                }
             }
         }
 
         $str = trim((string) $rawDate);
-        $formats = ['d.m.Y', 'd/m/Y', 'Y-m-d', 'Y/m/d', 'd-m-Y'];
+        $formats = ['d.m.Y', 'd/m/Y', 'Y-m-d', 'Y/m/d', 'd-m-Y', 'j.n.Y', 'j/n/Y'];
         foreach ($formats as $fmt) {
             try {
                 $parsed = Carbon::createFromFormat($fmt, $str);
@@ -1035,6 +1194,83 @@ class ScheduleExcelImportService
         return self::DAY_MAP[$norm] ?? null;
     }
 
+    /**
+     * Resolves program name with exact match first, and trailing parentheses tolerance fallback.
+     */
+    public function resolveProgram(string $rawProgram, array $programLookup): array
+    {
+        $raw = trim($rawProgram);
+        $cleanRaw = preg_replace('/\s+/u', ' ', $raw);
+
+        if (empty($cleanRaw)) {
+            return [
+                'program' => null,
+                'is_exact' => false,
+                'is_normalized' => false,
+                'normalized_name' => null,
+                'parenthesis_text' => null,
+                'warning' => null,
+                'error' => 'Program adı zorunludur.',
+            ];
+        }
+
+        // 1. Try Exact match first with full cell text
+        $exactProgram = $this->findProgram($cleanRaw, $programLookup);
+        if ($exactProgram) {
+            return [
+                'program' => $exactProgram,
+                'is_exact' => true,
+                'is_normalized' => false,
+                'normalized_name' => $cleanRaw,
+                'parenthesis_text' => null,
+                'warning' => null,
+                'error' => null,
+            ];
+        }
+
+        // 2. Try stripping trailing parenthesis: e.g. "Beraber Okuyalım (Lemalar)" -> "Beraber Okuyalım"
+        if (preg_match('/^(.*?)\s*\(([^)]+)\)\s*$/u', $cleanRaw, $matches)) {
+            $baseName = trim($matches[1]);
+            $parenthesisText = trim($matches[2]);
+
+            if (! empty($baseName)) {
+                $normProgram = $this->findProgram($baseName, $programLookup);
+                if ($normProgram) {
+                    return [
+                        'program' => $normProgram,
+                        'is_exact' => false,
+                        'is_normalized' => true,
+                        'normalized_name' => $baseName,
+                        'parenthesis_text' => $parenthesisText,
+                        'warning' => "\"{$cleanRaw}\" adı, \"{$normProgram->name}\" programı ile eşleştirildi (Parantezli açıklama '{$parenthesisText}' yok sayıldı).",
+                        'error' => null,
+                    ];
+                }
+
+                return [
+                    'program' => null,
+                    'is_exact' => false,
+                    'is_normalized' => true,
+                    'normalized_name' => $baseName,
+                    'parenthesis_text' => $parenthesisText,
+                    'warning' => null,
+                    'error' => "Program sistemde bulunamadı: '{$cleanRaw}' (Normalize edilen ad: '{$baseName}')",
+                ];
+            }
+        }
+
+        // 3. Program not found
+        return [
+            'program' => null,
+            'is_exact' => false,
+            'is_normalized' => false,
+            'normalized_name' => $cleanRaw,
+            'parenthesis_text' => null,
+            'warning' => null,
+            'error' => "Program sistemde bulunamadı: '{$cleanRaw}'",
+        ];
+    }
+
     protected function findProgram(string $rawProgram, array $programLookup): ?Program
     {
         $trimmed = trim($rawProgram);
@@ -1059,24 +1295,48 @@ class ScheduleExcelImportService
         return null;
     }
 
-    protected function formatTime(string $rawTime): ?string
+    protected function formatTime(mixed $rawTime): ?string
     {
-        $rawTime = trim((string) $rawTime);
-        if (empty($rawTime)) {
+        if ($rawTime === null) {
             return null;
         }
 
-        // Handle Excel numeric time float (e.g. 0.35416666666667 for 08:30)
-        if (is_numeric($rawTime) && (float) $rawTime < 1.0) {
-            $totalSeconds = (int) round((float) $rawTime * 86400);
-            $hours = (int) floor($totalSeconds / 3600);
-            $minutes = (int) floor(($totalSeconds % 3600) / 60);
-
-            return sprintf('%02d:%02d', $hours, $minutes);
+        if (is_string($rawTime)) {
+            $rawTime = trim($rawTime);
+            if ($rawTime === '') {
+                return null;
+            }
         }
 
-        // Standard string HH:MM or HH:MM:SS
-        if (preg_match('/^(\d{1,2})[:\.](\d{2})(?:[:\.]\d{2})?$/', $rawTime, $m)) {
+        // Exact strings for midnight / end-of-day
+        if (in_array((string) $rawTime, ['00:00', '0:00', '24:00', '24:00:00', '00:00:00'], true)) {
+            return '00:00';
+        }
+
+        // Numeric 0 or 1.0 (midnight)
+        if (is_numeric($rawTime)) {
+            $fVal = (float) $rawTime;
+            if ($fVal == 0.0 || $fVal == 1.0) {
+                return '00:00';
+            }
+
+            // Excel time serial (< 1.0)
+            if ($fVal > 0.0 && $fVal < 1.0) {
+                $totalSeconds = (int) round($fVal * 86400);
+                $hours = (int) floor($totalSeconds / 3600);
+                $minutes = (int) floor(($totalSeconds % 3600) / 60);
+
+                if ($hours === 24) {
+                    $hours = 0;
+                }
+
+                return sprintf('%02d:%02d', $hours, $minutes);
+            }
+        }
+
+        // Standard string HH:MM or HH:MM:SS or HH.MM
+        $str = (string) $rawTime;
+        if (preg_match('/^(\d{1,2})[:\.](\d{2})(?:[:\.]\d{2})?$/', $str, $m)) {
             $h = (int) $m[1];
             $min = (int) $m[2];
 

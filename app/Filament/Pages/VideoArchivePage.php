@@ -5,6 +5,7 @@ namespace App\Filament\Pages;
 use App\Models\Category;
 use App\Models\Program;
 use BackedEnum;
+use App\Filament\Concerns\PersistsTablePaginationInUrl;
 use Filament\Actions\Action;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Concerns\InteractsWithForms;
@@ -26,6 +27,7 @@ class VideoArchivePage extends Page implements HasForms, HasTable
 {
     use InteractsWithForms;
     use InteractsWithTable;
+    use PersistsTablePaginationInUrl;
 
     protected string $view = 'filament.pages.video-archive';
 

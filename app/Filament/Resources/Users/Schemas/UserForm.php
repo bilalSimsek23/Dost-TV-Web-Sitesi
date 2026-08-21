@@ -22,16 +22,6 @@ class UserForm
                     ->tabs([
                         Tab::make('Genel Bilgiler')
                             ->schema([
-                                FileUpload::make('avatar_url')
-                                    ->label('Profil Fotoğrafı')
-                                    ->avatar()
-                                    ->disk('public')
-                                    ->directory('avatars')
-                                    ->image()
-                                    ->acceptedFileTypes(['image/jpeg', 'image/png', 'image/webp'])
-                                    ->maxSize(5120)
-                                    ->columnSpanFull(),
-
                                 TextInput::make('name')
                                     ->label('Ad Soyad')
                                     ->required()
@@ -47,16 +37,51 @@ class UserForm
                                 TextInput::make('phone')
                                     ->label('Telefon')
                                     ->tel()
-                                    ->placeholder('05xx xxx xx xx')
-                                    ->maxLength(50),
+                                    ->prefix('+90')
+                                    ->placeholder('5XX XXX XX XX')
+                                    ->mask('599 999 99 99')
+                                    ->helperText('Türkiye GSM numarası (5 ile başlayan 10 hane)')
+                                    ->formatStateUsing(function (?string $state) {
+                                        if (blank($state)) {
+                                            return null;
+                                        }
+                                        $digits = preg_replace('/\D/', '', $state);
+                                        if (str_starts_with($digits, '90') && strlen($digits) === 12) {
+                                            return substr($digits, 2);
+                                        }
+                                        return $digits;
+                                    })
+                                    ->rule(function () {
+                                        return function (string $attribute, $value, \Closure $fail) {
+                                            if (blank($value)) {
+                                                return;
+                                            }
+                                            $digits = preg_replace('/\D/', '', (string) $value);
+                                            if (str_starts_with($digits, '90') && strlen($digits) === 12) {
+                                                $digits = substr($digits, 2);
+                                            }
+                                            if (strlen($digits) !== 10 || ! str_starts_with($digits, '5')) {
+                                                $fail('Telefon numarası 5 ile başlayan 10 haneli geçerli bir cep telefonu olmalıdır (Örn: 5XX XXX XX XX).');
+                                            }
+                                        };
+                                    })
+                                    ->columnSpanFull(),
                             ])->columns(2),
 
                         Tab::make('Hesap ve Rol')
                             ->schema([
-                                Select::make('role')
+                                Select::make('role_id')
                                     ->label('Rol')
-                                    ->options(User::ROLES)
-                                    ->default('editor')
+                                    ->options(function () {
+                                        $currentUser = auth()->user();
+                                        $query = \App\Models\Role::query()->where('is_active', true);
+                                        if (! $currentUser || ! $currentUser->isSuperAdmin()) {
+                                            $query->where('base_role', '!=', 'super_admin');
+                                        }
+
+                                        return $query->pluck('name', 'id');
+                                    })
+                                    ->default(fn () => \App\Models\Role::where('slug', 'editor')->value('id'))
                                     ->required()
                                     ->disabled(function (?User $record) {
                                         $currentUser = auth()->user();
@@ -65,12 +90,12 @@ class UserForm
                                         }
 
                                         // Administrator cannot edit role of a Super Admin
-                                        if ($record->hasRole('super_admin') && ! $currentUser->hasRole('super_admin')) {
+                                        if ($record->isSuperAdmin() && ! $currentUser->isSuperAdmin()) {
                                             return true;
                                         }
 
                                         // Cannot demote last active super admin
-                                        if ($record->hasRole('super_admin')) {
+                                        if ($record->isSuperAdmin()) {
                                             $activeSuperAdminsCount = User::where('role', 'super_admin')
                                                 ->where('is_active', true)
                                                 ->whereNull('deleted_at')
@@ -117,29 +142,18 @@ class UserForm
 
                         Tab::make('Güvenlik')
                             ->schema([
-                                TextInput::make('password')
-                                    ->label('Şifre')
-                                    ->password()
-                                    ->revealable()
-                                    ->required(fn (string $operation): bool => $operation === 'create')
-                                    ->confirmed()
-                                    ->minLength(8)
-                                    ->visible(fn (string $operation): bool => $operation === 'create'),
-
-                                TextInput::make('password_confirmation')
-                                    ->label('Şifre Tekrarı')
-                                    ->password()
-                                    ->revealable()
-                                    ->required(fn (string $operation): bool => $operation === 'create')
-                                    ->minLength(8)
-                                    ->visible(fn (string $operation): bool => $operation === 'create'),
+                                Placeholder::make('invitation_info')
+                                    ->label('Şifre Belirleme')
+                                    ->content('Kullanıcı oluşturulduğunda e-posta adresine 72 saat geçerli güvenli davet ve şifre belirleme bağlantısı gönderilecektir.')
+                                    ->visible(fn (string $operation): bool => $operation === 'create')
+                                    ->columnSpanFull(),
 
                                 TextInput::make('new_password')
                                     ->label('Yeni Şifre')
                                     ->password()
                                     ->revealable()
                                     ->confirmed('new_password_confirmation')
-                                    ->minLength(8)
+                                    ->minLength(5)
                                     ->helperText('Boş bırakılırsa mevcut şifre değişmez.')
                                     ->dehydrated(false)
                                     ->visible(fn (string $operation): bool => $operation === 'edit'),
@@ -148,7 +162,7 @@ class UserForm
                                     ->label('Yeni Şifre Tekrarı')
                                     ->password()
                                     ->revealable()
-                                    ->minLength(8)
+                                    ->minLength(5)
                                     ->dehydrated(false)
                                     ->visible(fn (string $operation): bool => $operation === 'edit'),
 

@@ -22,14 +22,18 @@
                 dilediğiniz an, dilediğiniz yerden izleyin, dinleyin.
             </p>
             <div class="mt-8 flex flex-wrap gap-4">
-                <a href="{{ route('live.tv') }}"
-                   class="inline-flex items-center gap-2 rounded-full bg-rose-600 px-6 py-3 font-semibold text-white shadow-lg shadow-rose-600/30 transition hover:bg-rose-500">
-                    Canlı TV İzle
-                </a>
-                <a href="{{ route('live.radio') }}"
-                   class="inline-flex items-center gap-2 rounded-full bg-white/5 px-6 py-3 font-semibold text-white ring-1 ring-inset ring-white/10 transition hover:bg-white/10">
-                    Canlı Radyo Dinle
-                </a>
+                @if ($settings->live_tv_is_public ?? true)
+                    <a href="{{ route('live.tv') }}"
+                       class="inline-flex items-center gap-2 rounded-full bg-rose-600 px-6 py-3 font-semibold text-white shadow-lg shadow-rose-600/30 transition hover:bg-rose-500">
+                        Canlı TV İzle
+                    </a>
+                @endif
+                @if ($settings->radio_is_public ?? true)
+                    <a href="{{ route('live.radio') }}"
+                       class="inline-flex items-center gap-2 rounded-full bg-white/5 px-6 py-3 font-semibold text-white ring-1 ring-inset ring-white/10 transition hover:bg-white/10">
+                        Canlı Radyo Dinle
+                    </a>
+                @endif
             </div>
         </div>
 

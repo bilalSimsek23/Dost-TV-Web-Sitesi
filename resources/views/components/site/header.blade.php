@@ -16,8 +16,8 @@
     $siteName = $siteName ?? ($siteSettings->site_name ?? 'Dost TV');
     $logo = $logo ?? ($siteSettings->logo ?? null);
     $logoAltText = $logoAltText ?? ($siteSettings->logo_alt_text ?: $siteName);
-    $liveButtonVisible = $liveButtonVisible ?? ($siteSettings->live_button_is_visible ?? true);
-    $liveButtonText = $liveButtonText ?? ($siteSettings->live_button_text ?: 'Canlı İzle');
+    $liveButtonVisible = $liveButtonVisible ?? (($siteSettings->live_button_is_visible ?? true) && ($siteSettings->live_tv_is_public ?? true));
+    $liveButtonText = $liveButtonText ?? ($siteSettings->live_button_text && $siteSettings->live_button_text !== 'Canlı İzle' ? $siteSettings->live_button_text : 'Canlı');
     $headerSticky = $headerSticky ?? ($siteSettings->header_is_sticky ?? true);
     $searchVisible = $searchVisible ?? ($siteSettings->search_is_visible ?? true);
 
@@ -51,7 +51,7 @@
         {{-- Navigation Menu Section --}}
         <x-site.menu location="header_primary" />
 
-        {{-- Right Section: Search & Live Button --}}
+        {{-- Right Section: Search & Live Dropdown CTA --}}
         <div class="flex items-center gap-3">
             @if($searchVisible)
                 <button type="button" class="p-1.5 text-slate-400 hover:text-white transition" aria-label="Arama">
@@ -68,7 +68,7 @@
                         <span class="absolute inline-flex h-full w-full animate-ping rounded-full bg-white opacity-75"></span>
                         <span class="relative inline-flex h-2 w-2 rounded-full bg-white"></span>
                     </span>
-                    {{ $liveButtonText }}
+                    <span>{{ $liveButtonText }}</span>
                 </a>
             @endif
         </div>

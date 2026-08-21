@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\Categories\RelationManagers;
 
+use App\Filament\Concerns\PersistsTablePaginationInUrl;
 use App\Models\Program;
 use Filament\Actions\Action;
 use Filament\Actions\AttachAction;
@@ -14,6 +15,8 @@ use Filament\Tables\Table;
 
 class ProgramsRelationManager extends RelationManager
 {
+    use PersistsTablePaginationInUrl;
+
     protected static string $relationship = 'programs';
 
     protected static ?string $title = 'Bu Kategorideki Programlar';

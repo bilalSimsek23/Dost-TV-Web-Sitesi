@@ -1,7 +1,7 @@
 @extends('layouts.app')
 
 @section('title', $program->name . ' - Dost TV')
-@section('description', \Illuminate\Support\Str::limit(strip_tags($program->description ?? ''), 150))
+@section('description', filled($program->meta_description) ? e(trim($program->meta_description)) : \Illuminate\Support\Str::limit(strip_tags($program->description ?? ''), 160))
 
 @section('content')
     @php

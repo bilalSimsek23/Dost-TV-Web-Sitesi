@@ -17,6 +17,7 @@ use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Forms\Contracts\HasForms;
+use App\Filament\Concerns\PersistsTablePaginationInUrl;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page as FilamentPage;
 use Filament\Support\Icons\Heroicon;
@@ -33,6 +34,7 @@ class TopHeader extends FilamentPage implements HasForms, HasTable
 {
     use InteractsWithForms;
     use InteractsWithTable;
+    use PersistsTablePaginationInUrl;
 
     protected string $view = 'filament.pages.top-header';
 

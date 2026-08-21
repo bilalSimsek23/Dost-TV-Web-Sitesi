@@ -1,5 +1,10 @@
 <nav class="hidden items-center gap-1 lg:flex">
     @foreach ($items as $item)
+        {{-- Skip duplicate "Canlı" dropdown from middle desktop navbar (now unified in right CTA) --}}
+        @if ($item->slug === 'canli' || ($item->item_type === 'dropdown' && in_array(strtolower(trim($item->title)), ['canlı', 'canli', 'canlı yayın', 'canli yayin'])))
+            @continue
+        @endif
+
         @if ($item->item_type === 'program_mega_menu')
             {{-- Programlar Dinamik Mega Menüsü --}}
             @php

@@ -38,18 +38,37 @@ class FooterLayoutPageTest extends TestCase
 
     public function test_authorized_user_can_access_footer_layout_page_and_see_corporate_list(): void
     {
-        $this->actingAs($this->admin)
+        $response = $this->actingAs($this->admin)
             ->get('/admin/site-layout/footer')
             ->assertSuccessful()
             ->assertSee('Footer Yönetimi')
             ->assertSee('Sayfa')
-            ->assertSee('İçerik Türü')
+            ->assertDontSee('İçerik Türü')
             ->assertSee('İşlem')
             ->assertSee('Yayıncı Künye Bilgisi')
-            ->assertSee('Künye Bilgisi')
-            ->assertSee('+ Yeni Kurumsal Bilgi')
-            ->assertSee('/admin/pages/' . $this->corporatePage->slug . '/edit');
+            ->assertSee('Yeni Kurumsal Bilgi')
+            ->assertSee('/admin/pages/' . $this->corporatePage->slug . '/edit')
+            ->assertSee('Kurumsal')
+            ->assertSee('İletişim')
+            ->assertSee('Sosyal Medya')
+            ->assertSee('Alt Bilgi')
+            ->assertSee('Önizleme');
+
+
+        // Verify native Filament input fields are present in DOM
+        $response->assertSee('Telefon Numarası')
+            ->assertSee('E-Posta Adresi')
+            ->assertSee('Instagram')
+            ->assertSee('Facebook')
+            ->assertSee('YouTube')
+            ->assertSee('X / Twitter')
+            ->assertSee('WhatsApp')
+            ->assertSee('Telegram')
+            ->assertSee('Telif Metni')
+            ->assertSee('Footer İletişim sütununda tel: bağlantısı olarak gösterilir.')
+            ->assertSee('Footer İletişim sütununda mailto: bağlantısı olarak gösterilir.');
     }
+
 
     public function test_page_resource_navigation_is_hidden_but_create_and_edit_routes_work(): void
     {
@@ -116,6 +135,45 @@ class FooterLayoutPageTest extends TestCase
             ->assertHasFormErrors(['facebook_url' => 'url']);
     }
 
+    public function test_corporate_pages_can_be_reordered(): void
+    {
+        $secondPage = Page::create([
+            'title' => 'İletişim ve Adres Bilgisi',
+            'slug' => 'iletisim-ve-adres-bilgisi',
+            'content' => 'İletişim metni',
+            'page_type' => 'corporate',
+            'show_in_footer' => true,
+            'sort_order' => 0,
+            'status' => 'published',
+        ]);
+
+        $this->corporatePage->update(['sort_order' => 1]);
+
+        // Reorder: make corporatePage first (0) and secondPage second (1)
+        Livewire::actingAs($this->admin)
+            ->test(FooterLayoutPage::class)
+            ->call('reorderCorporatePages', [$this->corporatePage->id, $secondPage->id])
+            ->assertHasNoFormErrors();
+
+        $this->assertEquals(0, $this->corporatePage->fresh()->sort_order);
+        $this->assertEquals(1, $secondPage->fresh()->sort_order);
+    }
+
+    public function test_footer_form_can_be_reset(): void
+    {
+        SiteSetting::current()->update([
+            'phone' => '+90 (312) 341 21 21',
+            'email' => 'orijinal@dosttv.com',
+        ]);
+
+        Livewire::actingAs($this->admin)
+            ->test(FooterLayoutPage::class)
+            ->set('data.phone', '+90 555 000 00 00')
+            ->call('resetForm')
+            ->assertSet('data.phone', '+90 (312) 341 21 21')
+            ->assertSet('data.email', 'orijinal@dosttv.com');
+    }
+
     public function test_public_footer_renders_3_columns_and_corporate_links(): void
     {
         SiteSetting::current()->update([
@@ -135,3 +193,4 @@ class FooterLayoutPageTest extends TestCase
             ->assertSee('Dost Medya A.Ş.');
     }
 }
+

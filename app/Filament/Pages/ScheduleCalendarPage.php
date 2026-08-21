@@ -2,6 +2,7 @@
 
 namespace App\Filament\Pages;
 
+use App\Filament\Concerns\PersistsTablePaginationInUrl;
 use App\Models\Episode;
 use App\Models\Program;
 use App\Models\Schedule;
@@ -45,6 +46,7 @@ class ScheduleCalendarPage extends Page implements HasActions, HasForms, HasTabl
     use InteractsWithActions;
     use InteractsWithForms;
     use InteractsWithTable;
+    use PersistsTablePaginationInUrl;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedCalendarDays;
 

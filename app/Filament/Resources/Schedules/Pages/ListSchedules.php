@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\Schedules\Pages;
 
+use App\Filament\Concerns\PersistsTablePaginationInUrl;
 use App\Filament\Resources\Schedules\ScheduleResource;
 use App\Models\Schedule;
 use Filament\Actions\CreateAction;
@@ -11,6 +12,8 @@ use Illuminate\Database\Eloquent\Builder;
 
 class ListSchedules extends ListRecords
 {
+    use PersistsTablePaginationInUrl;
+
     protected static string $resource = ScheduleResource::class;
 
     protected function getHeaderActions(): array

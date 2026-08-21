@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\Menus\RelationManagers;
 
+use App\Filament\Concerns\PersistsTablePaginationInUrl;
 use App\Filament\Resources\MenuItems\Schemas\MenuItemForm;
 use App\Filament\Resources\MenuItems\Tables\MenuItemsTable;
 use Filament\Actions\CreateAction;
@@ -12,6 +13,8 @@ use Filament\Tables\Table;
 
 class MenuItemsRelationManager extends RelationManager
 {
+    use PersistsTablePaginationInUrl;
+
     protected static string $relationship = 'items';
 
     protected static ?string $title = 'Menü Öğeleri';

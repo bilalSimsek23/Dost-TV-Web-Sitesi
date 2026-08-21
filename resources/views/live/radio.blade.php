@@ -11,19 +11,65 @@
                     <path stroke-linecap="round" stroke-linejoin="round" d="M9 9v10.5a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V15a2.25 2.25 0 012.25-2.25h1.5m3.75-3.75V19.5a2.25 2.25 0 002.25 2.25h.75a2.25 2.25 0 002.25-2.25V9m-7.5 0h7.5m-7.5 0a2.25 2.25 0 012.25-2.25h3a2.25 2.25 0 012.25 2.25m-7.5 0V6a2.25 2.25 0 012.25-2.25h3A2.25 2.25 0 0116.5 6v3" />
                 </svg>
             </div>
-            <h1 class="mt-6 text-2xl font-black text-white">{{ $settings->radio_name ?? $settings->site_name . ' Radyo' }}</h1>
-            <p class="mt-2 text-slate-400">Canlı radyo yayınımızı dinlemek için oynat tuşuna basın.</p>
 
-            <div class="mt-8">
-                @if ($settings->radio_stream_url)
-                    <audio controls class="w-full" preload="none">
+            {{-- Dynamic Title --}}
+            <h1 class="mt-6 text-2xl font-black text-white">
+                {{ $settings->radio_name ?: ($settings->site_name . ' Canlı Radyo') }}
+            </h1>
+
+            {{-- Dynamic Description --}}
+            @if (!empty($settings->radio_description))
+                <p class="mt-2 text-slate-400 max-w-lg mx-auto leading-relaxed">
+                    {{ $settings->radio_description }}
+                </p>
+            @else
+                <p class="mt-2 text-slate-400">Canlı radyo yayınımızı dinlemek için oynat tuşuna basın.</p>
+            @endif
+
+            {{-- Player or State Box --}}
+            @if (! $settings->radio_is_public)
+                {{-- Public Access Disabled --}}
+                <div class="mt-8 rounded-xl bg-slate-900/60 border border-white/10 p-6 text-center">
+                    <p class="text-sm font-medium text-slate-300">Canlı radyo yayını şu anda public erişime kapalıdır.</p>
+                </div>
+            @elseif (! $settings->radio_is_active)
+                {{-- Maintenance Mode --}}
+                <div class="mt-8 rounded-xl bg-slate-900/60 border border-amber-500/20 p-6 text-center">
+                    <p class="text-sm font-medium text-amber-300">{{ $settings->radio_maintenance_message ?: 'Canlı radyo yayınımız şu anda kullanılamıyor. Lütfen daha sonra tekrar deneyin.' }}</p>
+                </div>
+            @elseif (! $settings->radio_stream_url)
+                {{-- URL Unconfigured --}}
+                <div class="mt-8 text-center">
+                    <p class="text-sm text-slate-500">Radyo yayın linki henüz tanımlanmadı.</p>
+                </div>
+            @else
+                {{-- Audio Player with Backup & Error Container --}}
+                <div class="mt-8 space-y-3" x-data="{
+                    triedBackup: false,
+                    hasError: false,
+                    backupSrc: '{{ $settings->radio_backup_url }}',
+                    errorMsg: '{{ $settings->radio_error_message ?: 'Radyo akışı şu anda yüklenemiyor. Lütfen daha sonra tekrar deneyin.' }}',
+                    handleError() {
+                        const audio = this.$refs.audioPlayer;
+                        if (!this.triedBackup && this.backupSrc && this.backupSrc.trim() !== '') {
+                            this.triedBackup = true;
+                            audio.src = this.backupSrc;
+                            audio.load();
+                            audio.play().catch(() => {});
+                        } else {
+                            this.hasError = true;
+                        }
+                    }
+                }">
+                    <audio x-ref="audioPlayer" controls class="w-full" preload="none" x-on:error="handleError()">
                         <source src="{{ $settings->radio_stream_url }}">
                         Tarayıcınız ses oynatmayı desteklemiyor.
                     </audio>
-                @else
-                    <p class="text-sm text-slate-500">Radyo yayın linki henüz tanımlanmadı. Admin panelden Site Ayarları'na ekleyebilirsiniz.</p>
-                @endif
-            </div>
+                    <div x-show="hasError" x-cloak class="rounded-xl border border-rose-500/30 bg-rose-500/10 p-3 text-xs font-semibold text-rose-300">
+                        <span x-text="errorMsg"></span>
+                    </div>
+                </div>
+            @endif
         </div>
     </section>
 @endsection

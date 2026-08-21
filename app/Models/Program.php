@@ -65,12 +65,9 @@ class Program extends Model
                 $program->show_on_public = true;
             }
 
-            // Sync is_active with status & show_on_public for backward compatibility
-            if ($program->status === 'active' && $program->show_on_public) {
-                $program->is_active = true;
-            } elseif ($program->status === 'completed' || $program->status === 'archived' || ! $program->show_on_public) {
-                $program->is_active = false;
-            }
+            // Sync is_active with status & show_on_public (Single source of truth derivation)
+            // A program is active/visible if show_on_public is true and its status is active or season_break.
+            $program->is_active = (bool) $program->show_on_public && in_array($program->status, ['active', 'season_break'], true);
         });
 
         static::saved(function () {

@@ -35,6 +35,8 @@ class Announcement extends Model
         'type',
         'announcement_type_id',
         'image',
+        'button_text',
+        'button_url',
         'placement',
         'starts_at',
         'ends_at',

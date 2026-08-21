@@ -21,20 +21,6 @@ class UsersTable
         return $table
             ->searchPlaceholder('Kullanıcı ara...')
             ->columns([
-                ImageColumn::make('avatar_url')
-                    ->label('Avatar')
-                    ->circular()
-                    ->disk('public')
-                    ->defaultImageUrl(function (User $record) {
-                        $initial = mb_strtoupper(mb_substr($record->name, 0, 1));
-                        return 'data:image/svg+xml;utf8,' . rawurlencode("
-                            <svg xmlns='http://www.w3.org/2000/svg' width='40' height='40' viewBox='0 0 40 40'>
-                                <circle cx='20' cy='20' r='20' fill='#334155'/>
-                                <text x='50%' y='50%' dominant-baseline='central' text-anchor='middle' fill='#ffffff' font-size='16' font-family='sans-serif' font-weight='bold'>{$initial}</text>
-                            </svg>
-                        ");
-                    }),
-
                 TextColumn::make('name')
                     ->label('Ad Soyad')
                     ->searchable()
@@ -48,16 +34,21 @@ class UsersTable
                     ->copyable()
                     ->icon('heroicon-m-envelope'),
 
-                TextColumn::make('role')
+                TextColumn::make('phone')
+                    ->label('Telefon')
+                    ->searchable()
+                    ->formatStateUsing(fn (?string $state) => User::formatPhoneForDisplay($state) ?? '-')
+                    ->icon('heroicon-m-phone')
+                    ->color(fn (?string $state) => $state ? 'gray' : 'slate-500'),
+
+                TextColumn::make('roleModel.name')
                     ->label('Rol')
-                    ->formatStateUsing(fn (string $state) => User::ROLES[$state] ?? $state)
+                    ->default(fn (User $record) => User::ROLES[$record->role] ?? $record->role)
                     ->badge()
-                    ->color(fn (string $state): string => match ($state) {
+                    ->color(fn (User $record): string => match ($record->baseRole()) {
                         'super_admin' => 'rose',
                         'administrator' => 'amber',
-                        'designer' => 'sky',
                         'editor' => 'info',
-                        'content_manager' => 'emerald',
                         default => 'gray',
                     }),
 
@@ -67,15 +58,21 @@ class UsersTable
                     ->badge()
                     ->color(fn (bool $state): string => $state ? 'success' : 'gray'),
 
+                TextColumn::make('invitation_status')
+                    ->label('Davet')
+                    ->formatStateUsing(fn (string $state, User $record) => $record->invitation_status_label)
+                    ->badge()
+                    ->color(fn (User $record) => $record->invitation_status_color),
+
                 TextColumn::make('last_login_at')
                     ->label('Son Giriş')
                     ->formatStateUsing(fn ($state) => $state ? $state->format('d.m.Y H:i') : 'Henüz giriş yapmadı')
                     ->sortable(),
             ])
             ->filters([
-                SelectFilter::make('role')
+                SelectFilter::make('role_id')
                     ->label('Rol')
-                    ->options(User::ROLES),
+                    ->relationship('roleModel', 'name'),
 
                 SelectFilter::make('is_active')
                     ->label('Durum')
@@ -95,34 +92,118 @@ class UsersTable
                         if (! $currentUser) {
                             return false;
                         }
+
                         // Administrator cannot edit Super Admin
-                        if ($record->hasRole('super_admin') && ! $currentUser->hasRole('super_admin')) {
+                        if ($record->isSuperAdmin() && ! $currentUser->isSuperAdmin()) {
                             return false;
                         }
+
                         return true;
                     }),
 
+                Action::make('resendInvitation')
+                    ->label('Daveti Tekrar Gönder')
+                    ->icon('heroicon-o-paper-airplane')
+                    ->color('warning')
+                    ->requiresConfirmation()
+                    ->modalHeading('Davet Bağlantısını Yeniden Gönder')
+                    ->modalDescription(fn (User $record) => "{$record->name} kullanıcısına 72 saat geçerli yeni bir davet bağlantısı gönderilecek. Eski bağlantı geçersiz kılınacaktır.")
+                    ->modalSubmitActionLabel('Evet, Yeniden Gönder')
+                    ->visible(function (User $record) {
+                        $currentUser = auth()->user();
+                        if (! $currentUser) {
+                            return false;
+                        }
+
+                        if ($record->isSuperAdmin() && ! $currentUser->isSuperAdmin()) {
+                            return false;
+                        }
+
+                        return in_array($record->invitation_status, ['pending', 'expired', 'cancelled'], true);
+                    })
+                    ->action(function (User $record) {
+                        $service = app(\App\Services\Auth\UserInvitationService::class);
+                        $res = $service->resendInvitation($record, auth()->user());
+
+                        if ($res['mail_sent']) {
+                            Notification::make()
+                                ->title('Davet e-postası başarıyla yeniden gönderildi.')
+                                ->success()
+                                ->send();
+                        } else {
+                            Notification::make()
+                                ->title('Davet yenilendi ancak e-posta gönderilemedi.')
+                                ->warning()
+                                ->send();
+                        }
+                    }),
+
+                Action::make('cancelInvitation')
+                    ->label('Daveti İptal Et')
+                    ->icon('heroicon-o-no-symbol')
+                    ->color('gray')
+                    ->requiresConfirmation()
+                    ->modalHeading('Davet Bağlantısını İptal Et')
+                    ->modalDescription(fn (User $record) => "{$record->name} kullanıcısının bekleyen davet bağlantısı iptal edilecek.")
+                    ->modalSubmitActionLabel('Evet, İptal Et')
+                    ->visible(function (User $record) {
+                        $currentUser = auth()->user();
+                        if (! $currentUser) {
+                            return false;
+                        }
+
+                        if ($record->isSuperAdmin() && ! $currentUser->isSuperAdmin()) {
+                            return false;
+                        }
+
+                        return $record->invitation_status === 'pending';
+                    })
+                    ->action(function (User $record) {
+                        $service = app(\App\Services\Auth\UserInvitationService::class);
+                        $service->cancelInvitation($record, auth()->user());
+
+                        Notification::make()
+                            ->title('Davet bağlantısı iptal edildi.')
+                            ->success()
+                            ->send();
+                    }),
+
                 Action::make('toggleActive')
-                    ->label(fn (User $record) => $record->is_active ? 'Pasife Al' : 'Aktif Yap')
+                    ->label(fn (User $record) => $record->is_active ? 'Pasife Al' : 'Aktifleştir')
                     ->icon(fn (User $record) => $record->is_active ? 'heroicon-o-x-circle' : 'heroicon-o-check-circle')
                     ->color(fn (User $record) => $record->is_active ? 'warning' : 'success')
+                    ->requiresConfirmation()
+                    ->modalHeading(fn (User $record) => $record->is_active ? 'Kullanıcıyı Pasife Al' : 'Kullanıcıyı Aktifleştir')
+                    ->modalDescription(fn (User $record) => $record->is_active
+                        ? 'Bu kullanıcıyı pasife almak istediğinize emin misiniz? Kullanıcının açık tüm oturumları anında sonlandırılacaktır.'
+                        : 'Bu kullanıcıyı yeniden aktifleştirmek istediğinize emin misiniz?')
+                    ->modalSubmitActionLabel(fn (User $record) => $record->is_active ? 'Evet, Pasife Al' : 'Evet, Aktifleştir')
+                    ->visible(function (User $record) {
+                        $currentUser = auth()->user();
+                        if (! $currentUser) {
+                            return false;
+                        }
+
+                        // Administrator cannot deactivate Super Admin
+                        if ($record->isSuperAdmin() && ! $currentUser->isSuperAdmin()) {
+                            return false;
+                        }
+
+                        // Last active super admin cannot be deactivated
+                        if ($record->isSuperAdmin() && $record->is_active && User::isLastActiveSuperAdmin($record)) {
+                            return false;
+                        }
+
+                        return true;
+                    })
                     ->action(function (User $record) {
                         $currentUser = auth()->user();
                         if (! $currentUser) {
                             return;
                         }
 
-                        // 1. Cannot deactivate self
-                        if ($record->id === $currentUser->id && $record->is_active) {
-                            Notification::make()
-                                ->title('Kendi hesabınızı pasife alamazsınız.')
-                                ->danger()
-                                ->send();
-                            return;
-                        }
-
-                        // 2. Administrator cannot deactivate Super Admin
-                        if ($record->hasRole('super_admin') && ! $currentUser->hasRole('super_admin')) {
+                        // Administrator cannot deactivate Super Admin
+                        if ($record->isSuperAdmin() && ! $currentUser->isSuperAdmin()) {
                             Notification::make()
                                 ->title('Süper Admin hesabını pasife alma yetkiniz yoktur.')
                                 ->danger()
@@ -130,82 +211,97 @@ class UsersTable
                             return;
                         }
 
-                        // 3. Last active super_admin check
-                        if ($record->hasRole('super_admin') && $record->is_active) {
-                            $activeSuperAdminsCount = User::where('role', 'super_admin')
-                                ->where('is_active', true)
-                                ->whereNull('deleted_at')
-                                ->count();
-
-                            if ($activeSuperAdminsCount <= 1) {
-                                Notification::make()
-                                    ->title('Sistemdeki son aktif Süper Admin pasife alınamaz.')
-                                    ->danger()
-                                    ->send();
-                                return;
-                            }
+                        // Last active super_admin check
+                        if ($record->isSuperAdmin() && $record->is_active && User::isLastActiveSuperAdmin($record)) {
+                            Notification::make()
+                                ->title('Sistemdeki son aktif Süper Admin pasife alınamaz.')
+                                ->danger()
+                                ->send();
+                            return;
                         }
 
-                        $record->update(['is_active' => ! $record->is_active]);
+                        $newStatus = ! $record->is_active;
+                        $record->update(['is_active' => $newStatus]);
+
+                        if (! $newStatus) {
+                            \Illuminate\Support\Facades\DB::table('sessions')->where('user_id', $record->id)->delete();
+                        }
+
+                        $userName = $currentUser->name ?? 'Admin';
+                        $action = $newStatus ? 'activated' : 'deactivated';
+                        $msg = $newStatus
+                            ? "{$userName}, {$record->name} kullanıcısını aktifleştirdi."
+                            : "{$userName}, {$record->name} kullanıcısını pasife aldı.";
+
+                        \App\Services\Audit\AuditLogger::log(
+                            action: $action,
+                            message: $msg,
+                            subject: $record,
+                            subjectLabel: $record->name,
+                        );
 
                         Notification::make()
-                            ->title($record->is_active ? 'Kullanıcı aktifleştirildi.' : 'Kullanıcı pasife alındı.')
+                            ->title($record->is_active ? 'Kullanıcı aktifleştirildi.' : 'Kullanıcı pasife alındı ve oturumu kapatıldı.')
                             ->success()
                             ->send();
                     }),
 
-                DeleteAction::make('archive')
-                    ->label('Arşivle')
-                    ->modalHeading('Kullanıcıyı Arşivle')
-                    ->modalDescription('Bu kullanıcıyı arşivlemek istediğinize emin misiniz? Arşivlenen kullanıcı sisteme giriş yapamaz.')
-                    ->before(function (DeleteAction $action, User $record) {
+                Action::make('forceDelete')
+                    ->label('Kalıcı Sil')
+                    ->icon('heroicon-o-trash')
+                    ->color('danger')
+                    ->requiresConfirmation()
+                    ->modalHeading('Kullanıcıyı Kalıcı Olarak Sil')
+                    ->modalDescription('Bu kullanıcı kalıcı olarak silinecek. Bu işlem geri alınamaz.')
+                    ->modalSubmitActionLabel('Evet, Kalıcı Olarak Sil')
+                    ->visible(function (User $record) {
                         $currentUser = auth()->user();
-                        if (! $currentUser) {
-                            $action->cancel();
-                            return;
+                        if (! $currentUser || ! $currentUser->isSuperAdmin()) {
+                            return false;
                         }
 
-                        // Cannot archive self
-                        if ($record->id === $currentUser->id) {
+                        // Cannot delete last active super admin
+                        if ($record->isSuperAdmin() && User::isLastActiveSuperAdmin($record)) {
+                            return false;
+                        }
+
+                        return true;
+                    })
+                    ->action(function (User $record) {
+                        $currentUser = auth()->user();
+                        if (! $currentUser || ! $currentUser->isSuperAdmin()) {
                             Notification::make()
-                                ->title('Kendi hesabınızı arşivleyemezsiniz.')
+                                ->title('Yalnızca Süper Admin kullanıcıları kalıcı olarak silebilir.')
                                 ->danger()
                                 ->send();
-                            $action->cancel();
                             return;
                         }
 
-                        // Administrator cannot archive Super Admin
-                        if ($record->hasRole('super_admin') && ! $currentUser->hasRole('super_admin')) {
+                        if ($record->isSuperAdmin() && User::isLastActiveSuperAdmin($record)) {
                             Notification::make()
-                                ->title('Süper Admin hesabını arşivleme yetkiniz yoktur.')
+                                ->title('Sistemdeki son aktif Süper Admin silinemez.')
                                 ->danger()
                                 ->send();
-                            $action->cancel();
                             return;
                         }
 
-                        // Last active super_admin check
-                        if ($record->hasRole('super_admin')) {
-                            $activeSuperAdminsCount = User::where('role', 'super_admin')
-                                ->where('is_active', true)
-                                ->whereNull('deleted_at')
-                                ->count();
+                        $userName = $currentUser->name ?? 'Admin';
+                        $targetName = $record->name;
+                        \App\Services\Audit\AuditLogger::log(
+                            action: 'deleted',
+                            message: "{$userName}, {$targetName} kullanıcısını kalıcı olarak sildi.",
+                            subject: $record,
+                            subjectLabel: $targetName,
+                            isDestructive: true,
+                        );
 
-                            if ($activeSuperAdminsCount <= 1) {
-                                Notification::make()
-                                    ->title('Sistemdeki son aktif Süper Admin arşivlenemez.')
-                                    ->danger()
-                                    ->send();
-                                $action->cancel();
-                                return;
-                            }
-                        }
+                        $record->forceDelete();
+
+                        Notification::make()
+                            ->title('Kullanıcı kalıcı olarak silindi.')
+                            ->success()
+                            ->send();
                     }),
-
-                RestoreAction::make()
-                    ->label('Arşivden Çıkar')
-                    ->visible(fn () => auth()->user()?->hasRole('super_admin') ?? false),
             ]);
     }
 }

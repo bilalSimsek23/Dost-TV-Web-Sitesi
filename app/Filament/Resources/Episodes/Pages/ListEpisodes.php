@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\Episodes\Pages;
 
+use App\Filament\Concerns\PersistsTablePaginationInUrl;
 use App\Filament\Resources\Episodes\EpisodeResource;
 use App\Models\Episode;
 use App\Models\Program;
@@ -17,6 +18,8 @@ use Livewire\Attributes\Url;
 
 class ListEpisodes extends ListRecords
 {
+    use PersistsTablePaginationInUrl;
+
     protected static string $resource = EpisodeResource::class;
 
     #[Url]

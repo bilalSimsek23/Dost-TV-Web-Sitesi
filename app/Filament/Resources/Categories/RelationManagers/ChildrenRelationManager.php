@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\Categories\RelationManagers;
 
+use App\Filament\Concerns\PersistsTablePaginationInUrl;
 use App\Models\Category;
 use Filament\Actions\CreateAction;
 use Filament\Actions\DeleteAction;
@@ -25,6 +26,8 @@ use Illuminate\Support\Str;
 
 class ChildrenRelationManager extends RelationManager
 {
+    use PersistsTablePaginationInUrl;
+
     protected static string $relationship = 'children';
 
     protected static ?string $title = 'Alt Kategoriler';

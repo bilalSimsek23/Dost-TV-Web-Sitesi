@@ -90,25 +90,30 @@ class LiveBroadcastPage extends Page implements HasActions, HasForms
             ->statePath('tvData')
             ->components([
                 Section::make('Dost TV Canlı Yayın Ayarları')
+                    ->description('Canlı TV oynatıcısı, video akış kaynağı ve durum parametreleri.')
                     ->schema([
                         Grid::make(2)->schema([
                             Toggle::make('live_tv_is_active')
                                 ->label('Yayın Aktif')
+                                ->helperText('Kapalı olduğunda player yerine bakım mesajı gösterilir.')
                                 ->default(true),
 
                             Toggle::make('live_tv_is_public')
                                 ->label('Public Sitede Göster')
+                                ->helperText('Kapalı olduğunda yayın ziyaretçilere sunulmaz.')
                                 ->default(true),
                         ]),
 
                         TextInput::make('live_tv_title')
                             ->label('Yayın Başlığı')
                             ->placeholder('Dost TV Canlı Yayın')
+                            ->helperText('Public sayfada gösterilecek ana yayın başlığı.')
                             ->required(),
 
                         Textarea::make('live_tv_description')
                             ->label('Kısa Açıklama')
                             ->placeholder('Yayın hakkında kısa bilgi...')
+                            ->helperText('Public sayfada başlığın altında gösterilecek kısa açıklama.')
                             ->rows(2),
 
                         Grid::make(2)->schema([
@@ -132,28 +137,20 @@ class LiveBroadcastPage extends Page implements HasActions, HasForms
                         TextInput::make('live_tv_backup_url')
                             ->label('Yedek Yayın Bağlantısı')
                             ->placeholder('https://...')
+                            ->helperText('Ana yayın açılamazsa otomatik olarak bu bağlantı denenir.')
                             ->url(),
-
-                        FileUpload::make('live_tv_poster')
-                            ->label('Poster Görseli')
-                            ->disk('public')
-                            ->directory('live-tv')
-                            ->image()
-                            ->imageEditor()
-                            ->imageEditorAspectRatios(['16:9'])
-                            ->acceptedFileTypes(['image/jpeg', 'image/jpg', 'image/png', 'image/webp'])
-                            ->maxSize(5120)
-                            ->helperText('Önerilen boyut: 1920 × 1080 px (16:9). Maksimum 5 MB.'),
 
                         Grid::make(2)->schema([
                             Textarea::make('live_tv_maintenance_message')
                                 ->label('Bakım Mesajı')
                                 ->placeholder('Canlı yayın şu anda bakımdadır...')
+                                ->helperText('Yayın manuel olarak kapatıldığında ziyaretçiye gösterilir.')
                                 ->rows(2),
 
                             Textarea::make('live_tv_error_message')
                                 ->label('Hata Mesajı')
-                                ->placeholder('Yayın akışı yüklenemedi...')
+                                ->placeholder('Canlı yayın şu anda yüklenemiyor. Lütfen daha sonra tekrar deneyin.')
+                                ->helperText('Ana ve yedek yayın açılamadığında ziyaretçiye gösterilir.')
                                 ->rows(2),
                         ]),
                     ]),
@@ -166,25 +163,30 @@ class LiveBroadcastPage extends Page implements HasActions, HasForms
             ->statePath('fmData')
             ->components([
                 Section::make('Dost FM Canlı Radyo Ayarları')
+                    ->description('Canlı radyo ses akış bağlantısı ve kanal parametreleri.')
                     ->schema([
                         Grid::make(2)->schema([
                             Toggle::make('radio_is_active')
                                 ->label('Yayın Aktif')
+                                ->helperText('Kapalı olduğunda radyo çalar yerine bakım mesajı gösterilir.')
                                 ->default(true),
 
                             Toggle::make('radio_is_public')
                                 ->label('Public Sitede Göster')
+                                ->helperText('Kapalı olduğunda radyo yayını ziyaretçilere sunulmaz.')
                                 ->default(true),
                         ]),
 
                         TextInput::make('radio_name')
                             ->label('Radyo Adı')
                             ->placeholder('Dost FM Canlı Radyo')
+                            ->helperText('Public sayfada gösterilecek ana radyo başlığı.')
                             ->required(),
 
                         Textarea::make('radio_description')
                             ->label('Kısa Açıklama')
                             ->placeholder('Radyo yayını hakkında açıklama...')
+                            ->helperText('Public sayfada başlığın altında gösterilecek kısa açıklama.')
                             ->rows(2),
 
                         Grid::make(2)->schema([
@@ -197,29 +199,21 @@ class LiveBroadcastPage extends Page implements HasActions, HasForms
                             TextInput::make('radio_backup_url')
                                 ->label('Yedek Ses Akışı Bağlantısı')
                                 ->placeholder('https://...')
+                                ->helperText('Ana ses akışı açılamazsa otomatik olarak bu bağlantı denenir.')
                                 ->url(),
                         ]),
-
-                        FileUpload::make('radio_image')
-                            ->label('Radyo Logosu / Poster')
-                            ->disk('public')
-                            ->directory('live-fm')
-                            ->image()
-                            ->imageEditor()
-                            ->imageEditorAspectRatios(['1:1'])
-                            ->acceptedFileTypes(['image/jpeg', 'image/jpg', 'image/png', 'image/webp'])
-                            ->maxSize(5120)
-                            ->helperText('Önerilen boyut: 1000 × 1000 px (1:1). Maksimum 5 MB.'),
 
                         Grid::make(2)->schema([
                             Textarea::make('radio_maintenance_message')
                                 ->label('Bakım Mesajı')
                                 ->placeholder('Radyo yayını şu anda bakımdadır...')
+                                ->helperText('Radyo manuel olarak kapatıldığında ziyaretçiye gösterilir.')
                                 ->rows(2),
 
                             Textarea::make('radio_error_message')
                                 ->label('Hata Mesajı')
                                 ->placeholder('Radyo akışı yüklenemedi...')
+                                ->helperText('Ana ve yedek ses akışı açılamadığında ziyaretçiye gösterilir.')
                                 ->rows(2),
                         ]),
                     ]),
@@ -238,7 +232,7 @@ class LiveBroadcastPage extends Page implements HasActions, HasForms
             'live_tv_type' => $data['live_tv_type'] ?? 'hls',
             'live_tv_url' => $data['live_tv_url'] ?? null,
             'live_tv_backup_url' => $data['live_tv_backup_url'] ?? null,
-            'live_tv_poster' => $data['live_tv_poster'] ?? null,
+            'live_tv_poster' => $settings->live_tv_poster,
             'live_tv_maintenance_message' => $data['live_tv_maintenance_message'] ?? null,
             'live_tv_error_message' => $data['live_tv_error_message'] ?? null,
             'live_tv_is_public' => (bool) ($data['live_tv_is_public'] ?? true),
@@ -261,7 +255,7 @@ class LiveBroadcastPage extends Page implements HasActions, HasForms
             'radio_description' => $data['radio_description'] ?? null,
             'radio_stream_url' => $data['radio_stream_url'] ?? null,
             'radio_backup_url' => $data['radio_backup_url'] ?? null,
-            'radio_image' => $data['radio_image'] ?? null,
+            'radio_image' => $settings->radio_image,
             'radio_maintenance_message' => $data['radio_maintenance_message'] ?? null,
             'radio_error_message' => $data['radio_error_message'] ?? null,
             'radio_is_public' => (bool) ($data['radio_is_public'] ?? true),

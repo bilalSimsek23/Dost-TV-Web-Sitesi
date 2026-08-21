@@ -53,6 +53,17 @@ class SiteSetting extends Model
         'radio_error_message',
         'radio_is_active',
         'radio_is_public',
+        'title_suffix',
+        'system_email',
+        'default_meta_description',
+        'default_og_image',
+        'search_engine_indexing',
+        'canonical_url_mode',
+        'google_analytics_id',
+        'google_tag_manager_id',
+        'google_site_verification',
+        'custom_head_code',
+        'custom_body_code',
     ];
 
     protected $casts = [
@@ -66,6 +77,7 @@ class SiteSetting extends Model
         'live_tv_is_public' => 'boolean',
         'radio_is_active' => 'boolean',
         'radio_is_public' => 'boolean',
+        'search_engine_indexing' => 'boolean',
         'homepage_sections' => 'array',
     ];
 
@@ -138,6 +150,9 @@ class SiteSetting extends Model
         return static::query()->first() ?? static::query()->forceCreate([
             'id' => 1,
             'site_name' => 'Dost TV',
+            'title_suffix' => '| DOST TV',
+            'search_engine_indexing' => true,
+            'canonical_url_mode' => 'current_url',
             'live_tv_type' => 'iframe',
             'live_button_text' => 'Canlı İzle',
             'live_button_is_visible' => true,

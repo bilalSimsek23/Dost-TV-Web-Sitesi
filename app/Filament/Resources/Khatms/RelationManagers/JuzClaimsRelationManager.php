@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\Khatms\RelationManagers;
 
+use App\Filament\Concerns\PersistsTablePaginationInUrl;
 use App\Models\JuzClaim;
 use Filament\Actions\Action;
 use Filament\Actions\EditAction;
@@ -20,6 +21,8 @@ use Filament\Tables\Table;
 
 class JuzClaimsRelationManager extends RelationManager
 {
+    use PersistsTablePaginationInUrl;
+
     protected static string $relationship = 'juzClaims';
 
     protected static ?string $title = '30 Cüz Yönetimi (Cüz Dağıtımı)';

@@ -63,6 +63,15 @@ class Page extends Model
 
     protected static function booted(): void
     {
+        static::creating(function (Page $page) {
+            if (! array_key_exists('page_type', $page->getAttributes())) {
+                $page->page_type = 'corporate';
+            }
+            if (! array_key_exists('status', $page->getAttributes())) {
+                $page->status = 'published';
+            }
+        });
+
         static::saving(function (Page $page) {
             if (blank($page->slug)) {
                 $page->slug = Str::slug($page->title);

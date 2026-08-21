@@ -125,6 +125,10 @@
                         <span class="inline-flex items-center gap-1.5 px-2.5 py-1 mt-1 rounded-md text-xs font-bold bg-red-100 text-red-800 dark:bg-red-950/50 dark:text-red-300">
                             ⚠ {{ $error_count }} Hata Tespit Edildi
                         </span>
+                    @elseif($warning_count > 0)
+                        <span class="inline-flex items-center gap-1.5 px-2.5 py-1 mt-1 rounded-md text-xs font-bold bg-amber-100 text-amber-800 dark:bg-amber-950/50 dark:text-amber-300">
+                            ⚠ {{ $warning_count }} Uyarı (Aktarılabilir)
+                        </span>
                     @else
                         <span class="inline-flex items-center gap-1.5 px-2.5 py-1 mt-1 rounded-md text-xs font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300">
                             ✓ 24 Saat Tamamlandı (Hata Yok)
@@ -146,7 +150,7 @@
 
                         <x-filament::button
                             tag="a"
-                            href="{{ route('schedule.excel.errors', ['key' => base64_encode(json_encode($errorsList))]) }}"
+                            href="{{ route('schedule.excel.errors', ['key' => base64_encode(json_encode(array_merge($errorsList, $warningsList)))]) }}"
                             color="danger"
                             icon="heroicon-o-arrow-down-tray"
                             size="xs"
@@ -162,6 +166,36 @@
                                     {{ $err['row_num'] }}:
                                 </span>
                                 <span>{{ $err['message'] }}</span>
+                            </div>
+                        @endforeach
+                    </div>
+                </div>
+            @endif
+
+            <!-- Warning Box (Does not block import) -->
+            @if(! empty($warningsList))
+                <div class="p-5 bg-amber-50 border border-amber-200 rounded-xl dark:bg-amber-950/30 dark:border-amber-800/50 space-y-3">
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center gap-2">
+                            <x-heroicon-o-information-circle class="w-5 h-5 text-amber-600 dark:text-amber-400" />
+                            <div>
+                                <h4 class="text-sm font-bold text-amber-900 dark:text-amber-200">
+                                    Program Eşleştirme Uyarıları ({{ count($warningsList) }})
+                                </h4>
+                                <p class="text-xs text-amber-700 dark:text-amber-300 mt-0.5">
+                                    Aşağıdaki programlar sonundaki parantezli açıklamalar yok sayılarak sistemdeki ana programlarla eşleştirilmiştir. Bu durum içe aktarmayı engellemez.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="max-h-48 overflow-y-auto divide-y divide-amber-100 dark:divide-amber-900/30 text-xs text-amber-800 dark:text-amber-300">
+                        @foreach($warningsList as $warn)
+                            <div class="py-1.5 flex items-start gap-2">
+                                <span class="font-bold text-amber-900 dark:text-amber-100 min-w-[120px]">
+                                    {{ $warn['row_num'] }}:
+                                </span>
+                                <span>{{ $warn['message'] }}</span>
                             </div>
                         @endforeach
                     </div>
@@ -220,7 +254,7 @@
                                 @endphp
 
                                 @forelse($filteredRows as $row)
-                                    <tr class="hover:bg-gray-50/50 dark:hover:bg-gray-800/30 transition {{ $row['status'] === 'error' ? 'bg-red-50/30 dark:bg-red-950/10' : '' }}">
+                                    <tr class="hover:bg-gray-50/50 dark:hover:bg-gray-800/30 transition {{ $row['status'] === 'error' ? 'bg-red-50/30 dark:bg-red-950/10' : ($row['status'] === 'warning' ? 'bg-amber-50/30 dark:bg-amber-950/10' : '') }}">
                                         <td class="py-2.5 px-3 font-medium text-gray-900 dark:text-white">
                                             {{ $row['day_name'] }}
                                         </td>
@@ -232,6 +266,11 @@
                                         </td>
                                         <td class="py-2.5 px-3 font-medium text-gray-900 dark:text-white">
                                             {{ $row['program_name'] }}
+                                            @if(($row['status'] ?? '') === 'warning' && ($row['raw_program'] ?? '') !== ($row['program_name'] ?? ''))
+                                                <span class="text-[10px] text-amber-600 dark:text-amber-400 block font-normal">
+                                                    Excel: {{ $row['raw_program'] }}
+                                                </span>
+                                            @endif
                                         </td>
                                         <td class="py-2.5 px-3">
                                             @if($row['is_live'])
@@ -249,6 +288,10 @@
                                             @if($row['status'] === 'ready')
                                                 <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300">
                                                     Geçerli
+                                                </span>
+                                            @elseif($row['status'] === 'warning')
+                                                <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950/50 dark:text-amber-300" title="{{ implode(', ', $row['warnings'] ?? []) }}">
+                                                    Uyarı
                                                 </span>
                                             @else
                                                 <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-red-100 text-red-800 dark:bg-red-950/50 dark:text-red-300" title="{{ implode(', ', $row['errors'] ?? []) }}">

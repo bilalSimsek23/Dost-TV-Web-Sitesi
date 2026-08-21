@@ -17,15 +17,22 @@
                     this.show = true;
                     return;
                 }
-                if (!sessionStorage.getItem(this.storageKey)) {
-                    this.show = true;
-                    document.body.style.overflow = 'hidden';
+                const dismissedAt = localStorage.getItem(this.storageKey);
+                if (dismissedAt) {
+                    const diff = Date.now() - parseInt(dismissedAt, 10);
+                    const twentyFourHours = 24 * 60 * 60 * 1000;
+                    if (diff < twentyFourHours) {
+                        this.show = false;
+                        return;
+                    }
                 }
+                this.show = true;
+                document.body.style.overflow = 'hidden';
             },
             close() {
                 this.show = false;
                 if (!this.preview) {
-                    sessionStorage.setItem(this.storageKey, 'true');
+                    localStorage.setItem(this.storageKey, Date.now().toString());
                     document.body.style.overflow = '';
                 }
             }
@@ -33,7 +40,7 @@
          x-show="show"
          x-cloak
          @keydown.escape.window="close()"
-         class="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6"
+         class="fixed inset-0 z-[70] flex items-center justify-center p-4 sm:p-6"
          role="dialog"
          aria-modal="true"
          aria-labelledby="announcement-modal-title">
@@ -70,32 +77,65 @@
             </button>
 
             {{-- Modal Body --}}
-            <div class="relative overflow-hidden rounded-2xl bg-slate-900 border border-white/10 shadow-2xl">
+            <div class="relative overflow-hidden rounded-2xl bg-slate-900 border border-white/10 shadow-2xl flex flex-col items-center">
                 @if ($imageUrl)
                     {{-- Image Aspect Ratio Preserved --}}
-                    <div class="relative max-h-[86vh] max-w-[90vw] overflow-hidden flex items-center justify-center bg-black/40">
+                    <div class="relative max-h-[78vh] max-w-[90vw] overflow-hidden flex items-center justify-center bg-black/40">
                         <img src="{{ $imageUrl }}"
                              alt="{{ $title ?? 'Duyuru Görseli' }}"
-                             class="h-auto max-h-[86vh] w-auto max-w-[90vw] object-contain rounded-xl">
+                             class="h-auto max-h-[78vh] w-auto max-w-[90vw] object-contain rounded-t-xl {{ empty($buttonUrl) ? 'rounded-b-xl' : '' }}">
                     </div>
+
+                    @if (!empty($buttonUrl))
+                        <div class="p-3 bg-slate-900/95 border-t border-white/10 flex items-center justify-center gap-3 w-full">
+                            <a href="{{ $buttonUrl }}"
+                               @click="close()"
+                               class="inline-flex items-center justify-center gap-1.5 rounded-xl bg-rose-600 px-6 py-2.5 text-sm font-bold text-white shadow-lg transition hover:bg-rose-500 hover:scale-[1.02]">
+                                <span>{{ $buttonText ?: 'Daha Fazla Bilgi' }}</span>
+                                <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg>
+                            </a>
+                            <button type="button"
+                                    @click="close()"
+                                    class="inline-flex items-center justify-center rounded-xl bg-white/10 px-4 py-2.5 text-sm font-medium text-slate-300 hover:bg-white/15 transition">
+                                Kapat
+                            </button>
+                        </div>
+                    @endif
                 @else
                     {{-- Text Only Modal Content --}}
-                    <div class="p-6 sm:p-8 max-w-lg text-center space-y-4">
+                    <div class="p-6 sm:p-8 max-w-lg text-center space-y-4 max-h-[85vh] overflow-y-auto">
                         <h3 id="announcement-modal-title" class="text-xl font-bold text-white">
                             {{ $title }}
                         </h3>
                         @if ($message)
-                            <p class="text-sm text-slate-300 leading-relaxed whitespace-pre-line">
+                            <p class="text-sm text-slate-300 leading-relaxed whitespace-pre-line text-left sm:text-center">
                                 {{ $message }}
                             </p>
                         @endif
-                        <div class="pt-2">
-                            <button type="button"
-                                    @click="close()"
-                                    class="inline-flex items-center justify-center rounded-xl bg-rose-600 px-6 py-2.5 text-sm font-semibold text-white shadow-lg transition hover:bg-rose-500">
-                                Anladım
-                            </button>
-                        </div>
+
+                        @if (!empty($buttonUrl))
+                            <div class="pt-3 flex flex-wrap items-center justify-center gap-3">
+                                <a href="{{ $buttonUrl }}"
+                                   @click="close()"
+                                   class="inline-flex items-center justify-center gap-1.5 rounded-xl bg-rose-600 px-6 py-2.5 text-sm font-bold text-white shadow-lg transition hover:bg-rose-500 hover:scale-[1.02]">
+                                    <span>{{ $buttonText ?: 'İncele' }}</span>
+                                    <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg>
+                                </a>
+                                <button type="button"
+                                        @click="close()"
+                                        class="inline-flex items-center justify-center rounded-xl bg-white/10 px-5 py-2.5 text-sm font-semibold text-slate-300 hover:bg-white/15 transition">
+                                    Kapat
+                                </button>
+                            </div>
+                        @else
+                            <div class="pt-2">
+                                <button type="button"
+                                        @click="close()"
+                                        class="inline-flex items-center justify-center rounded-xl bg-rose-600 px-6 py-2.5 text-sm font-semibold text-white shadow-lg transition hover:bg-rose-500">
+                                    Anladım
+                                </button>
+                            </div>
+                        @endif
                     </div>
                 @endif
             </div>

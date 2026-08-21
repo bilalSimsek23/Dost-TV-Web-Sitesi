@@ -23,6 +23,39 @@ class AnnouncementService
             ->get();
     }
 
+    /**
+     * Resolve the placement string for the current request.
+     */
+    public static function resolveCurrentPlacement(): string
+    {
+        $routeName = request()->route()?->getName();
+        $path = trim(request()->path(), '/');
+
+        return match (true) {
+            $routeName === 'home' || $path === '' => 'home',
+            $routeName === 'live.tv' || $path === 'canli-tv' => 'live_tv',
+            $routeName === 'live.radio' || $path === 'canli-radyo' => 'live_radio',
+            $routeName === 'schedule.index' || $path === 'yayin-akisi' => 'schedule',
+            default => 'other',
+        };
+    }
+
+    /**
+     * Get the single highest priority active popup announcement for a given placement.
+     * Order: is_pinned DESC, sort_order ASC, starts_at DESC, id DESC.
+     */
+    public function getTopPopupForPlacement(string $placement): ?Announcement
+    {
+        return Announcement::query()
+            ->currentlyVisible()
+            ->forPlacement($placement)
+            ->orderByDesc('is_pinned')
+            ->orderBy('sort_order')
+            ->orderByDesc('starts_at')
+            ->orderByDesc('id')
+            ->first();
+    }
+
     public function forHome(): Collection
     {
         return $this->getVisibleForPlacement('home');

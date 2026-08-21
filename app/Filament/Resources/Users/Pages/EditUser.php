@@ -23,84 +23,126 @@ class EditUser extends EditRecord
         }
         unset($data['new_password'], $data['new_password_confirmation']);
 
-        // 2. Security Check: Cannot deactivate self
-        if ($record->id === $currentUser?->id && isset($data['is_active']) && ! $data['is_active']) {
+        // 2. Security Check: Last active super admin cannot deactivate self
+        if ($record->id === $currentUser?->id && isset($data['is_active']) && ! $data['is_active'] && User::isLastActiveSuperAdmin($record)) {
             Notification::make()
-                ->title('Kendi hesabınızı pasife alamazsınız.')
+                ->title('Sistemdeki son aktif Süper Admin pasife alınamaz.')
                 ->danger()
                 ->send();
             $data['is_active'] = true;
         }
 
-        // 3. Security Check: Administrator cannot modify super_admin role
-        if ($record->hasRole('super_admin') && $currentUser && ! $currentUser->hasRole('super_admin')) {
-            $data['role'] = 'super_admin';
+        // 3. Security Check: Non-super_admin cannot assign Super Admin role or modify Super Admin users
+        if ($currentUser && ! $currentUser->isSuperAdmin()) {
+            if ($record->isSuperAdmin()) {
+                $data['role_id'] = $record->role_id;
+                $data['role'] = 'super_admin';
+                $data['is_active'] = $record->is_active;
+            } else {
+                if (isset($data['role_id'])) {
+                    $targetRole = \App\Models\Role::find($data['role_id']);
+                    if ($targetRole && $targetRole->base_role === 'super_admin') {
+                        $data['role_id'] = $record->role_id;
+                        $data['role'] = $record->role;
+                    }
+                }
+                if (($data['role'] ?? null) === 'super_admin') {
+                    $data['role'] = $record->role;
+                }
+            }
         }
 
         // 4. Security Check: Last active super_admin protection
-        if ($record->hasRole('super_admin')) {
-            $activeSuperAdminsCount = User::where('role', 'super_admin')
-                ->where('is_active', true)
-                ->whereNull('deleted_at')
-                ->count();
-
-            if ($activeSuperAdminsCount <= 1) {
-                // Prevent role demotion
-                if (isset($data['role']) && $data['role'] !== 'super_admin') {
+        if ($record->isSuperAdmin() && User::isLastActiveSuperAdmin($record)) {
+            // Prevent role demotion
+            if (isset($data['role_id'])) {
+                $targetRole = \App\Models\Role::find($data['role_id']);
+                if ($targetRole && $targetRole->base_role !== 'super_admin') {
                     Notification::make()
                         ->title('Sistemdeki son aktif Süper Admin rolü değiştirilemez.')
                         ->danger()
                         ->send();
+                    $data['role_id'] = $record->role_id;
                     $data['role'] = 'super_admin';
                 }
-                // Prevent deactivation
-                if (isset($data['is_active']) && ! $data['is_active']) {
-                    Notification::make()
-                        ->title('Sistemdeki son aktif Süper Admin pasife alınamaz.')
-                        ->danger()
-                        ->send();
-                    $data['is_active'] = true;
-                }
+            } elseif (isset($data['role']) && $data['role'] !== 'super_admin') {
+                Notification::make()
+                    ->title('Sistemdeki son aktif Süper Admin rolü değiştirilemez.')
+                    ->danger()
+                    ->send();
+                $data['role'] = 'super_admin';
+            }
+
+            // Prevent deactivation
+            if (isset($data['is_active']) && ! $data['is_active']) {
+                Notification::make()
+                    ->title('Sistemdeki son aktif Süper Admin pasife alınamaz.')
+                    ->danger()
+                    ->send();
+                $data['is_active'] = true;
             }
         }
 
         return $data;
     }
 
+    protected function afterSave(): void
+    {
+        $userName = auth()->user()?->name ?? 'Admin';
+        $record = $this->record;
+
+        if ($record->wasChanged('role') || $record->wasChanged('role_id')) {
+            \App\Services\Audit\AuditLogger::log(
+                action: 'role_changed',
+                message: "{$userName}, {$record->name} kullanıcısının rolünü değiştirdi.",
+                subject: $record,
+                subjectLabel: $record->name,
+            );
+
+            return;
+        }
+
+        \App\Services\Audit\AuditLogger::log(
+            action: 'updated',
+            message: "{$userName}, {$record->name} kullanıcısını düzenledi.",
+            subject: $record,
+            subjectLabel: $record->name,
+        );
+    }
+
     protected function getHeaderActions(): array
     {
         return [
-            DeleteAction::make('archive')
-                ->label('Arşivle')
-                ->modalHeading('Kullanıcıyı Arşivle')
-                ->before(function (DeleteAction $action) {
+            DeleteAction::make('forceDelete')
+                ->label('Kalıcı Sil')
+                ->modalHeading('Kullanıcıyı Kalıcı Olarak Sil')
+                ->modalDescription('Bu kullanıcı kalıcı olarak silinecek. Bu işlem geri alınamaz.')
+                ->modalSubmitActionLabel('Evet, Kalıcı Olarak Sil')
+                ->visible(function () {
                     $record = $this->getRecord();
                     $currentUser = auth()->user();
 
-                    if ($record->id === $currentUser?->id) {
-                        Notification::make()->title('Kendi hesabınızı arşivleyemezsiniz.')->danger()->send();
-                        $action->cancel();
-                        return;
+                    if (! $currentUser || ! $currentUser->isSuperAdmin()) {
+                        return false;
                     }
 
-                    if ($record->hasRole('super_admin') && $currentUser && ! $currentUser->hasRole('super_admin')) {
-                        Notification::make()->title('Süper Admin hesabını arşivleme yetkiniz yoktur.')->danger()->send();
-                        $action->cancel();
-                        return;
+                    if ($record->isSuperAdmin() && User::isLastActiveSuperAdmin($record)) {
+                        return false;
                     }
 
-                    if ($record->hasRole('super_admin')) {
-                        $activeSuperAdminsCount = User::where('role', 'super_admin')
-                            ->where('is_active', true)
-                            ->whereNull('deleted_at')
-                            ->count();
-
-                        if ($activeSuperAdminsCount <= 1) {
-                            Notification::make()->title('Sistemdeki son aktif Süper Admin arşivlenemez.')->danger()->send();
-                            $action->cancel();
-                            return;
-                        }
-                    }
+                    return true;
+                })
+                ->before(function () {
+                    $record = $this->getRecord();
+                    $userName = auth()->user()?->name ?? 'Admin';
+                    $targetName = $record->name;
+                    \App\Services\Audit\AuditLogger::log(
+                        action: 'deleted',
+                        message: "{$userName}, {$targetName} kullanıcısını kalıcı olarak sildi.",
+                        subject: $record,
+                        subjectLabel: $targetName,
+                        isDestructive: true,
+                    );
                 }),
         ];
     }

@@ -8,6 +8,7 @@ use App\Models\ProgramSeason;
 use App\Models\ProgramSeries;
 use App\Models\YoutubeSyncLog;
 use App\Support\Youtube;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 
@@ -176,109 +177,200 @@ class YouTubePlaylistSyncService
         $errorCount = 0;
         $createdEpisodes = [];
 
-        foreach ($rawItems as $item) {
-            $videoId = $item['video_id'];
-            $canonicalUrl = Youtube::canonicalUrl($videoId);
+        if (! $dryRun) {
+            try {
+                DB::transaction(function () use (
+                    $rawItems,
+                    $existingVideoIds,
+                    $existingEpisodesByVideoId,
+                    $updateExistingMetadata,
+                    $series,
+                    $season,
+                    $program,
+                    $playlistUrl,
+                    $startedAt,
+                    &$maxEpisodeNum,
+                    &$createdCount,
+                    &$updatedCount,
+                    &$unchangedCount,
+                    &$errorCount,
+                    &$createdEpisodes
+                ) {
+                    foreach ($rawItems as $item) {
+                        $videoId = $item['video_id'];
+                        $canonicalUrl = Youtube::canonicalUrl($videoId);
 
-            if (isset($existingVideoIds[$videoId])) {
-                if ($updateExistingMetadata) {
-                    try {
-                        $existingEp = $existingEpisodesByVideoId[$videoId] ?? null;
+                        if (isset($existingVideoIds[$videoId])) {
+                            if ($updateExistingMetadata) {
+                                try {
+                                    $existingEp = $existingEpisodesByVideoId[$videoId] ?? null;
 
-                        if ($existingEp) {
-                            $updates = [];
-                            if ($item['title'] !== $existingEp->title) {
-                                $updates['title'] = $item['title'];
-                            }
-                            if (! empty($item['description']) && $item['description'] !== $existingEp->description) {
-                                $updates['description'] = $item['description'];
-                            }
-                            if (! empty($item['thumbnail_url']) && $item['thumbnail_url'] !== $existingEp->thumbnail) {
-                                $updates['thumbnail'] = $item['thumbnail_url'];
-                            }
-                            if (! empty($item['published_at'])) {
-                                $newAiredAt = date('Y-m-d', strtotime($item['published_at']));
-                                $currAiredAt = $existingEp->aired_at ? $existingEp->aired_at->format('Y-m-d') : null;
-                                if ($newAiredAt !== $currAiredAt) {
-                                    $updates['aired_at'] = $newAiredAt;
+                                    if ($existingEp) {
+                                        $updates = [];
+                                        if ($item['title'] !== $existingEp->title) {
+                                            $updates['title'] = $item['title'];
+                                        }
+                                        if (! empty($item['description']) && $item['description'] !== $existingEp->description) {
+                                            $updates['description'] = $item['description'];
+                                        }
+                                        if (! empty($item['thumbnail_url']) && $item['thumbnail_url'] !== $existingEp->thumbnail) {
+                                            $updates['thumbnail'] = $item['thumbnail_url'];
+                                        }
+                                        if (! empty($item['published_at'])) {
+                                            $newAiredAt = date('Y-m-d', strtotime($item['published_at']));
+                                            $currAiredAt = $existingEp->aired_at ? $existingEp->aired_at->format('Y-m-d') : null;
+                                            if ($newAiredAt !== $currAiredAt) {
+                                                $updates['aired_at'] = $newAiredAt;
+                                            }
+                                        }
+                                        if ($canonicalUrl !== $existingEp->youtube_url) {
+                                            $updates['youtube_url'] = $canonicalUrl;
+                                        }
+
+                                        if (! empty($updates)) {
+                                            $existingEp->update($updates);
+                                            $updatedCount++;
+                                        } else {
+                                            $unchangedCount++;
+                                        }
+                                    } else {
+                                        $unchangedCount++;
+                                    }
+                                } catch (\Throwable $e) {
+                                    $errorCount++;
+                                    Log::error("Error updating episode metadata for series video {$videoId}: {$e->getMessage()}");
+                                    throw $e;
                                 }
-                            }
-                            if ($canonicalUrl !== $existingEp->youtube_url) {
-                                $updates['youtube_url'] = $canonicalUrl;
-                            }
-
-                            if (! empty($updates)) {
-                                if (! $dryRun) {
-                                    $existingEp->update($updates);
-                                }
-                                $updatedCount++;
                             } else {
                                 $unchangedCount++;
                             }
-                        } else {
-                            $unchangedCount++;
+                            continue;
                         }
-                    } catch (\Throwable $e) {
-                        $errorCount++;
-                        Log::error("Error updating episode metadata for series video {$videoId}: {$e->getMessage()}");
+
+                        // Mark as processed in-memory
+                        $existingVideoIds[$videoId] = true;
+                        $maxEpisodeNum++;
+
+                        $episodeData = [
+                            'program_id' => $series->program_id,
+                            'program_series_id' => $series->id,
+                            'season_number' => $season?->season_number,
+                            'season_year' => $season?->season_year,
+                            'video_source' => 'youtube',
+                            'youtube_url' => $canonicalUrl,
+                            'title' => $item['title'],
+                            'slug' => Str::slug($item['title']) . '-' . Str::random(5),
+                            'description' => $item['description'] ?? null,
+                            'thumbnail' => $item['thumbnail_url'] ?? null,
+                            'horizontal_image' => $item['thumbnail_url'] ?? null,
+                            'aired_at' => ! empty($item['published_at']) ? date('Y-m-d H:i:s', strtotime($item['published_at'])) : now(),
+                            'episode_number' => $maxEpisodeNum,
+                            'status' => 'published',
+                            'show_on_public' => true,
+                            'is_active' => true,
+                        ];
+
+                        Episode::create($episodeData);
+
+                        $createdCount++;
+                        $createdEpisodes[] = $episodeData;
                     }
-                } else {
-                    $unchangedCount++;
+
+                    $series->update(['last_youtube_sync_at' => now()]);
+                    if ($season) {
+                        $season->update(['last_youtube_sync_at' => now()]);
+                    }
+                    if ($program) {
+                        $program->update(['last_youtube_sync_at' => now()]);
+                    }
+
+                    YoutubeSyncLog::create([
+                        'program_id' => $series->program_id,
+                        'playlist_url' => $playlistUrl,
+                        'status' => $errorCount > 0 ? 'partial' : 'success',
+                        'checked_videos' => count($rawItems),
+                        'new_videos' => $createdCount,
+                        'created_episodes' => $createdCount,
+                        'skipped_videos' => $unchangedCount + $updatedCount,
+                        'started_at' => $startedAt,
+                        'finished_at' => now(),
+                    ]);
+                });
+            } catch (\Throwable $e) {
+                Log::error("YouTube Playlist Sync DB Transaction Error for Series {$series->id}: {$e->getMessage()}", [
+                    'exception' => $e,
+                    'series_id' => $series->id,
+                    'playlist_url' => $playlistUrl,
+                ]);
+
+                YoutubeSyncLog::create([
+                    'program_id' => $series->program_id,
+                    'playlist_url' => $playlistUrl,
+                    'status' => 'failed',
+                    'error_message' => 'Veritabanı senkronizasyon hatası: ' . $e->getMessage(),
+                    'started_at' => $startedAt,
+                    'finished_at' => now(),
+                ]);
+
+                return [
+                    'success' => false,
+                    'program_id' => $series->program_id,
+                    'program_name' => $program?->name ?? 'Program',
+                    'program_series_id' => $series->id,
+                    'series_name' => $series->name,
+                    'season_number' => $season?->season_number,
+                    'season_year' => $season?->season_year,
+                    'playlist_url' => $playlistUrl,
+                    'total_items' => count($rawItems),
+                    'new_videos' => 0,
+                    'created_episodes' => 0,
+                    'updated_episodes' => 0,
+                    'unchanged_episodes' => 0,
+                    'skipped_existing' => 0,
+                    'errors' => 1,
+                    'dry_run' => false,
+                    'message' => 'Senkronizasyon veritabanı işlemi sırasında hata oluştu ve geri alındı: ' . $e->getMessage(),
+                    'items' => [],
+                ];
+            }
+        } else {
+            // Dry Run Simulation Mode (In-Memory Only, No DB Writes)
+            foreach ($rawItems as $item) {
+                $videoId = $item['video_id'];
+                $canonicalUrl = Youtube::canonicalUrl($videoId);
+
+                if (isset($existingVideoIds[$videoId])) {
+                    if ($updateExistingMetadata) {
+                        $updatedCount++;
+                    } else {
+                        $unchangedCount++;
+                    }
+                    continue;
                 }
-                continue;
+
+                $existingVideoIds[$videoId] = true;
+                $maxEpisodeNum++;
+
+                $createdCount++;
+                $createdEpisodes[] = [
+                    'program_id' => $series->program_id,
+                    'program_series_id' => $series->id,
+                    'season_number' => $season?->season_number,
+                    'season_year' => $season?->season_year,
+                    'video_source' => 'youtube',
+                    'youtube_url' => $canonicalUrl,
+                    'title' => $item['title'],
+                    'slug' => Str::slug($item['title']) . '-' . Str::random(5),
+                    'description' => $item['description'] ?? null,
+                    'thumbnail' => $item['thumbnail_url'] ?? null,
+                    'horizontal_image' => $item['thumbnail_url'] ?? null,
+                    'aired_at' => ! empty($item['published_at']) ? date('Y-m-d H:i:s', strtotime($item['published_at'])) : now(),
+                    'episode_number' => $maxEpisodeNum,
+                    'status' => 'published',
+                    'show_on_public' => true,
+                    'is_active' => true,
+                ];
             }
-
-            // Mark as processed in-memory
-            $existingVideoIds[$videoId] = true;
-            $maxEpisodeNum++;
-
-            $episodeData = [
-                'program_id' => $series->program_id,
-                'program_series_id' => $series->id,
-                'season_number' => $season?->season_number,
-                'season_year' => $season?->season_year,
-                'video_source' => 'youtube',
-                'youtube_url' => $canonicalUrl,
-                'title' => $item['title'],
-                'slug' => Str::slug($item['title']) . '-' . Str::random(5),
-                'description' => $item['description'] ?? null,
-                'thumbnail' => $item['thumbnail_url'] ?? null,
-                'horizontal_image' => $item['thumbnail_url'] ?? null,
-                'aired_at' => ! empty($item['published_at']) ? date('Y-m-d H:i:s', strtotime($item['published_at'])) : now(),
-                'episode_number' => $maxEpisodeNum,
-                'status' => 'published',
-                'show_on_public' => true,
-                'is_active' => true,
-            ];
-
-            if (! $dryRun) {
-                Episode::create($episodeData);
-            }
-
-            $createdCount++;
-            $createdEpisodes[] = $episodeData;
-        }
-
-        if (! $dryRun) {
-            $series->update(['last_youtube_sync_at' => now()]);
-            if ($season) {
-                $season->update(['last_youtube_sync_at' => now()]);
-            }
-            if ($program) {
-                $program->update(['last_youtube_sync_at' => now()]);
-            }
-
-            YoutubeSyncLog::create([
-                'program_id' => $series->program_id,
-                'playlist_url' => $playlistUrl,
-                'status' => $errorCount > 0 ? 'partial' : 'success',
-                'checked_videos' => count($rawItems),
-                'new_videos' => $createdCount,
-                'created_episodes' => $createdCount,
-                'skipped_videos' => $unchangedCount + $updatedCount,
-                'started_at' => $startedAt,
-                'finished_at' => now(),
-            ]);
         }
 
         return [
@@ -473,105 +565,192 @@ class YouTubePlaylistSyncService
         $errorCount = 0;
         $createdEpisodes = [];
 
-        foreach ($rawItems as $item) {
-            $videoId = $item['video_id'];
-            $canonicalUrl = Youtube::canonicalUrl($videoId);
+        if (! $dryRun) {
+            try {
+                DB::transaction(function () use (
+                    $rawItems,
+                    $existingVideoIds,
+                    $existingEpisodesByVideoId,
+                    $updateExistingMetadata,
+                    $season,
+                    $program,
+                    $playlistUrl,
+                    $startedAt,
+                    &$maxEpisodeNum,
+                    &$createdCount,
+                    &$updatedCount,
+                    &$unchangedCount,
+                    &$errorCount,
+                    &$createdEpisodes
+                ) {
+                    foreach ($rawItems as $item) {
+                        $videoId = $item['video_id'];
+                        $canonicalUrl = Youtube::canonicalUrl($videoId);
 
-            if (isset($existingVideoIds[$videoId])) {
-                if ($updateExistingMetadata) {
-                    try {
-                        $existingEp = $existingEpisodesByVideoId[$videoId] ?? null;
+                        if (isset($existingVideoIds[$videoId])) {
+                            if ($updateExistingMetadata) {
+                                try {
+                                    $existingEp = $existingEpisodesByVideoId[$videoId] ?? null;
 
-                        if ($existingEp) {
-                            $updates = [];
-                            if ($item['title'] !== $existingEp->title) {
-                                $updates['title'] = $item['title'];
-                            }
-                            if (! empty($item['description']) && $item['description'] !== $existingEp->description) {
-                                $updates['description'] = $item['description'];
-                            }
-                            if (! empty($item['thumbnail_url']) && $item['thumbnail_url'] !== $existingEp->thumbnail) {
-                                $updates['thumbnail'] = $item['thumbnail_url'];
-                            }
-                            if (! empty($item['published_at'])) {
-                                $newAiredAt = date('Y-m-d', strtotime($item['published_at']));
-                                $currAiredAt = $existingEp->aired_at ? $existingEp->aired_at->format('Y-m-d') : null;
-                                if ($newAiredAt !== $currAiredAt) {
-                                    $updates['aired_at'] = $newAiredAt;
+                                    if ($existingEp) {
+                                        $updates = [];
+                                        if ($item['title'] !== $existingEp->title) {
+                                            $updates['title'] = $item['title'];
+                                        }
+                                        if (! empty($item['description']) && $item['description'] !== $existingEp->description) {
+                                            $updates['description'] = $item['description'];
+                                        }
+                                        if (! empty($item['thumbnail_url']) && $item['thumbnail_url'] !== $existingEp->thumbnail) {
+                                            $updates['thumbnail'] = $item['thumbnail_url'];
+                                        }
+                                        if (! empty($item['published_at'])) {
+                                            $newAiredAt = date('Y-m-d', strtotime($item['published_at']));
+                                            $currAiredAt = $existingEp->aired_at ? $existingEp->aired_at->format('Y-m-d') : null;
+                                            if ($newAiredAt !== $currAiredAt) {
+                                                $updates['aired_at'] = $newAiredAt;
+                                            }
+                                        }
+                                        if ($canonicalUrl !== $existingEp->youtube_url) {
+                                            $updates['youtube_url'] = $canonicalUrl;
+                                        }
+
+                                        if (! empty($updates)) {
+                                            $existingEp->update($updates);
+                                            $updatedCount++;
+                                        } else {
+                                            $unchangedCount++;
+                                        }
+                                    } else {
+                                        $unchangedCount++;
+                                    }
+                                } catch (\Throwable $e) {
+                                    $errorCount++;
+                                    Log::error("Error updating episode metadata for video {$videoId}: {$e->getMessage()}");
+                                    throw $e;
                                 }
-                            }
-                            if ($canonicalUrl !== $existingEp->youtube_url) {
-                                $updates['youtube_url'] = $canonicalUrl;
-                            }
-
-                            if (! empty($updates)) {
-                                if (! $dryRun) {
-                                    $existingEp->update($updates);
-                                }
-                                $updatedCount++;
                             } else {
                                 $unchangedCount++;
                             }
-                        } else {
-                            $unchangedCount++;
+                            continue;
                         }
-                    } catch (\Throwable $e) {
-                        $errorCount++;
-                        Log::error("Error updating episode metadata for video {$videoId}: {$e->getMessage()}");
+
+                        // Mark as processed in-memory
+                        $existingVideoIds[$videoId] = true;
+                        $maxEpisodeNum++;
+
+                        $episodeData = [
+                            'program_id' => $season->program_id,
+                            'season_number' => $season->season_number,
+                            'season_year' => $season->season_year,
+                            'video_source' => 'youtube',
+                            'youtube_url' => $canonicalUrl,
+                            'title' => $item['title'],
+                            'slug' => Str::slug($item['title']) . '-' . Str::random(5),
+                            'description' => $item['description'] ?? null,
+                            'thumbnail' => $item['thumbnail_url'] ?? null,
+                            'horizontal_image' => $item['thumbnail_url'] ?? null,
+                            'aired_at' => ! empty($item['published_at']) ? date('Y-m-d H:i:s', strtotime($item['published_at'])) : now(),
+                            'episode_number' => $maxEpisodeNum,
+                            'status' => 'published',
+                            'show_on_public' => true,
+                            'is_active' => true,
+                        ];
+
+                        Episode::create($episodeData);
+
+                        $createdCount++;
+                        $createdEpisodes[] = $episodeData;
                     }
-                } else {
-                    $unchangedCount++;
+
+                    $season->update(['last_youtube_sync_at' => now()]);
+                    if ($program) {
+                        $program->update(['last_youtube_sync_at' => now()]);
+                    }
+
+                    YoutubeSyncLog::create([
+                        'program_id' => $season->program_id,
+                        'playlist_url' => $playlistUrl,
+                        'status' => $errorCount > 0 ? 'partial' : 'success',
+                        'checked_videos' => count($rawItems),
+                        'new_videos' => $createdCount,
+                        'created_episodes' => $createdCount,
+                        'skipped_videos' => $unchangedCount + $updatedCount,
+                        'started_at' => $startedAt,
+                        'finished_at' => now(),
+                    ]);
+                });
+            } catch (\Throwable $e) {
+                Log::error("YouTube Playlist Sync DB Transaction Error for Season {$season->id}: {$e->getMessage()}", [
+                    'exception' => $e,
+                    'season_id' => $season->id,
+                    'playlist_url' => $playlistUrl,
+                ]);
+
+                YoutubeSyncLog::create([
+                    'program_id' => $season->program_id,
+                    'playlist_url' => $playlistUrl,
+                    'status' => 'failed',
+                    'error_message' => 'Veritabanı senkronizasyon hatası: ' . $e->getMessage(),
+                    'started_at' => $startedAt,
+                    'finished_at' => now(),
+                ]);
+
+                return [
+                    'success' => false,
+                    'program_id' => $season->program_id,
+                    'program_name' => $program?->name ?? 'Program',
+                    'season_number' => $season->season_number,
+                    'season_year' => $season->season_year,
+                    'playlist_url' => $playlistUrl,
+                    'total_items' => count($rawItems),
+                    'new_videos' => 0,
+                    'created_episodes' => 0,
+                    'updated_episodes' => 0,
+                    'unchanged_episodes' => 0,
+                    'skipped_existing' => 0,
+                    'errors' => 1,
+                    'dry_run' => false,
+                    'message' => 'Senkronizasyon veritabanı işlemi sırasında hata oluştu ve geri alındı: ' . $e->getMessage(),
+                    'items' => [],
+                ];
+            }
+        } else {
+            // Dry Run Simulation Mode (In-Memory Only, No DB Writes)
+            foreach ($rawItems as $item) {
+                $videoId = $item['video_id'];
+                $canonicalUrl = Youtube::canonicalUrl($videoId);
+
+                if (isset($existingVideoIds[$videoId])) {
+                    if ($updateExistingMetadata) {
+                        $updatedCount++;
+                    } else {
+                        $unchangedCount++;
+                    }
+                    continue;
                 }
-                continue;
+
+                $existingVideoIds[$videoId] = true;
+                $maxEpisodeNum++;
+
+                $createdCount++;
+                $createdEpisodes[] = [
+                    'program_id' => $season->program_id,
+                    'season_number' => $season->season_number,
+                    'season_year' => $season->season_year,
+                    'video_source' => 'youtube',
+                    'youtube_url' => $canonicalUrl,
+                    'title' => $item['title'],
+                    'slug' => Str::slug($item['title']) . '-' . Str::random(5),
+                    'description' => $item['description'] ?? null,
+                    'thumbnail' => $item['thumbnail_url'] ?? null,
+                    'horizontal_image' => $item['thumbnail_url'] ?? null,
+                    'aired_at' => ! empty($item['published_at']) ? date('Y-m-d H:i:s', strtotime($item['published_at'])) : now(),
+                    'episode_number' => $maxEpisodeNum,
+                    'status' => 'published',
+                    'show_on_public' => true,
+                    'is_active' => true,
+                ];
             }
-
-            // Mark as processed in-memory
-            $existingVideoIds[$videoId] = true;
-            $maxEpisodeNum++;
-
-            $episodeData = [
-                'program_id' => $season->program_id,
-                'season_number' => $season->season_number,
-                'season_year' => $season->season_year,
-                'video_source' => 'youtube',
-                'youtube_url' => $canonicalUrl,
-                'title' => $item['title'],
-                'slug' => Str::slug($item['title']) . '-' . Str::random(5),
-                'description' => $item['description'] ?? null,
-                'thumbnail' => $item['thumbnail_url'] ?? null,
-                'horizontal_image' => $item['thumbnail_url'] ?? null,
-                'aired_at' => ! empty($item['published_at']) ? date('Y-m-d H:i:s', strtotime($item['published_at'])) : now(),
-                'episode_number' => $maxEpisodeNum,
-                'status' => 'published',
-                'show_on_public' => true,
-                'is_active' => true,
-            ];
-
-            if (! $dryRun) {
-                Episode::create($episodeData);
-            }
-
-            $createdCount++;
-            $createdEpisodes[] = $episodeData;
-        }
-
-        if (! $dryRun) {
-            $season->update(['last_youtube_sync_at' => now()]);
-            if ($program) {
-                $program->update(['last_youtube_sync_at' => now()]);
-            }
-
-            YoutubeSyncLog::create([
-                'program_id' => $season->program_id,
-                'playlist_url' => $playlistUrl,
-                'status' => $errorCount > 0 ? 'partial' : 'success',
-                'checked_videos' => count($rawItems),
-                'new_videos' => $createdCount,
-                'created_episodes' => $createdCount,
-                'skipped_videos' => $unchangedCount + $updatedCount,
-                'started_at' => $startedAt,
-                'finished_at' => now(),
-            ]);
         }
 
         return [
@@ -774,11 +953,15 @@ class YouTubePlaylistSyncService
 
     /**
      * Synchronize all active program series and program seasons that have a configured YouTube playlist URL.
+     * Automatically filters by program status IN ('active', 'season_break'), excluding 'completed' and 'archived'.
      */
     public function syncAllPlaylists(bool $dryRun = false): array
     {
+        $allowedStatuses = ['active', 'season_break'];
+
         $allSeries = ProgramSeries::whereNotNull('youtube_playlist_url')
             ->where('youtube_playlist_url', '!=', '')
+            ->whereHas('program', fn ($q) => $q->whereIn('status', $allowedStatuses))
             ->with(['program', 'programSeason'])
             ->get();
 
@@ -787,6 +970,7 @@ class YouTubePlaylistSyncService
         $seasons = ProgramSeason::whereNotNull('youtube_playlist_url')
             ->where('youtube_playlist_url', '!=', '')
             ->whereNotIn('id', $seriesSeasonIds)
+            ->whereHas('program', fn ($q) => $q->whereIn('status', $allowedStatuses))
             ->with('program')
             ->get();
 
@@ -798,16 +982,21 @@ class YouTubePlaylistSyncService
 
         $legacyPrograms = Program::whereNotNull('youtube_playlist_url')
             ->where('youtube_playlist_url', '!=', '')
+            ->whereIn('status', $allowedStatuses)
             ->whereNotIn('id', $existingProgIds)
             ->get();
 
         foreach ($legacyPrograms as $lp) {
-            $s = ProgramSeason::create([
-                'program_id' => $lp->id,
-                'season_number' => 1,
-                'season_year' => null,
-                'youtube_playlist_url' => $lp->youtube_playlist_url,
-            ]);
+            $s = ProgramSeason::updateOrCreate(
+                [
+                    'program_id' => $lp->id,
+                    'season_number' => 1,
+                    'season_year' => null,
+                ],
+                [
+                    'youtube_playlist_url' => $lp->youtube_playlist_url,
+                ]
+            );
             $seasons->push($s);
         }
 

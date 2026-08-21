@@ -4,13 +4,16 @@ namespace App\Filament\Pages\SiteLayout;
 
 use App\Models\Menu;
 use App\Models\MenuItem;
+use App\Models\Page as PageModel;
 use App\Models\SiteSetting;
 use App\Support\SiteCache;
 use BackedEnum;
+use Filament\Actions\Action;
+use Filament\Actions\Concerns\InteractsWithActions;
+use Filament\Actions\Contracts\HasActions;
 use Filament\Forms\Components\FileUpload;
-
 use Filament\Forms\Components\Placeholder;
-
+use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Forms\Concerns\InteractsWithForms;
@@ -21,11 +24,13 @@ use Filament\Schemas\Components\Tabs;
 use Filament\Schemas\Components\Tabs\Tab;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
-use Illuminate\Support\HtmlString;
+use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Support\Facades\Cache;
 
-class HeaderLayoutPage extends Page implements HasForms
+class HeaderLayoutPage extends Page implements HasForms, HasActions
 {
     use InteractsWithForms;
+    use InteractsWithActions;
 
     protected string $view = 'filament.pages.site-layout.header-layout';
 
@@ -43,9 +48,16 @@ class HeaderLayoutPage extends Page implements HasForms
 
     public ?array $data = [];
 
+    public string $menuSearch = '';
+
     public static function canAccess(): bool
     {
         return auth()->user()?->hasAnyRole(['super_admin', 'administrator', 'designer', 'editor']) ?? false;
+    }
+
+    public function getSubheading(): ?string
+    {
+        return 'Üst alan logosu, menü navigasyonu ve header davranışlarını tek merkezden yönetin.';
     }
 
     public function mount(): void
@@ -60,7 +72,9 @@ class HeaderLayoutPage extends Page implements HasForms
             ->components([
                 Tabs::make('header-layout-tabs')
                     ->tabs([
+                        // 1. Logo ve Marka Sekmesi
                         Tab::make('Logo ve Marka')
+                            ->icon('heroicon-o-photo')
                             ->schema([
                                 TextInput::make('site_name')
                                     ->label('Site Adı')
@@ -90,110 +104,22 @@ class HeaderLayoutPage extends Page implements HasForms
                                     ->helperText('Erişilebilirlik için kullanılır. Boş bırakılırsa site adı kullanılır.'),
                             ]),
 
+                        // 2. Navigasyon Sekmesi
                         Tab::make('Navigasyon')
+                            ->icon('heroicon-o-bars-3')
                             ->schema([
-                                Placeholder::make('navigation_info')
-                                    ->label('HEADER MENÜSÜ')
-                                    ->helperText('Header ana menüsü bu ekrandan düzenlenmez. Burada yalnızca mevcut durum gösterilir.')
-                                    ->content(function () {
-                                        $menu = Menu::where('location', 'header_primary')->first();
-                                        $totalItems = $menu ? $menu->items()->count() : 0;
-                                        $activeItems = $menu ? $menu->items()->where('is_active', true)->count() : 0;
-                                        $updatedAt = $menu && $menu->updated_at ? $menu->updated_at->format('d Ağustos Y') : now()->format('d Ağustos Y');
-
-                                        return new HtmlString("
-                                            <div class='p-3 rounded-lg bg-slate-900 border border-slate-700/80 text-xs space-y-2'>
-                                                <div class='flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 pb-2'>
-                                                    <div>
-                                                        <span class='text-slate-400'>Toplam Menü:</span>
-                                                        <strong class='text-white ml-1 font-semibold'>{$totalItems}</strong>
-                                                    </div>
-                                                    <div>
-                                                        <span class='text-slate-400'>Aktif Menü:</span>
-                                                        <strong class='text-emerald-400 ml-1 font-semibold'>{$activeItems}</strong>
-                                                    </div>
-                                                    <div>
-                                                        <span class='text-slate-400'>Son Güncelleme:</span>
-                                                        <span class='text-slate-300 ml-1 font-medium'>{$updatedAt}</span>
-                                                    </div>
-                                                </div>
-                                                <div class='flex justify-end pt-1'>
-                                                    <a href='/admin/top-header' class='text-xs text-rose-400 hover:text-rose-300 font-medium hover:underline inline-flex items-center gap-1'>
-                                                        Header Menüsünü Düzenle →
-                                                    </a>
-                                                </div>
-                                            </div>
-                                        ");
-                                    })
-                                    ->columnSpanFull(),
-
-                                Placeholder::make('navigation_preview_list')
-                                    ->label('Mevcut Menü Özet Listesi')
-                                    ->content(function () {
-                                        $menu = Menu::where('location', 'header_primary')->first();
-                                        if (! $menu) {
-                                            return new HtmlString("<p class='text-slate-400 text-xs'>Menü kaydı bulunamadı.</p>");
-                                        }
-
-                                        $items = $menu->rootItems()->where('is_active', true)->take(6)->get();
-                                        $html = "<div class='flex flex-wrap gap-2 p-2.5 rounded-lg bg-slate-900 border border-slate-700/80 text-xs'>";
-                                        foreach ($items as $item) {
-                                            $html .= "<div class='inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-slate-800 text-slate-200 border border-slate-700/50'><span class='text-emerald-400 font-bold'>✓</span> {$item->title}</div>";
-                                        }
-                                        $html .= "</div>";
-
-                                        return new HtmlString($html);
-                                    })
+                                Placeholder::make('header_menu_table')
+                                    ->hiddenLabel()
+                                    ->content(fn () => view('filament.pages.site-layout.partials.header-navigation-table', [
+                                        'menuItems' => $this->menuItems,
+                                        'menuSearch' => $this->menuSearch,
+                                    ]))
                                     ->columnSpanFull(),
                             ]),
 
-                        Tab::make('Canlı Yayın Butonu')
-                            ->schema([
-                                Toggle::make('live_button_is_visible')
-                                    ->label('"Canlı İzle" Butonunu Göster')
-                                    ->default(true),
-
-                                TextInput::make('live_button_text')
-                                    ->label('Buton Metni')
-                                    ->default('Canlı İzle')
-                                    ->required()
-                                    ->maxLength(50),
-
-                                Placeholder::make('live_broadcast_info')
-                                    ->label('Yayın Durumu Bilgisi')
-                                    ->content(function () {
-                                        $settings = SiteSetting::current();
-                                        $tvActive = $settings->live_tv_is_active ? 'Aktif' : 'Pasif';
-                                        $tvPublic = $settings->live_tv_is_public ? 'Açık' : 'Kapalı';
-
-                                        return new HtmlString("
-                                            <div class='p-3 rounded-lg bg-slate-900 border border-slate-700/80 text-xs space-y-2'>
-                                                <div class='flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-2'>
-                                                    <div>
-                                                        <span class='text-slate-400'>Hedef Sayfa:</span>
-                                                        <strong class='text-white ml-1 font-semibold'>Canlı TV Sayfası</strong>
-                                                    </div>
-                                                    <div>
-                                                        <span class='text-slate-400'>Yayın Durumu:</span>
-                                                        <span class='ml-1 font-semibold text-emerald-400'>{$tvActive}</span>
-                                                    </div>
-                                                    <div>
-                                                        <span class='text-slate-400'>Public Görünürlük:</span>
-                                                        <span class='ml-1 font-semibold text-rose-400'>{$tvPublic}</span>
-                                                    </div>
-                                                </div>
-                                                <div class='flex justify-end pt-1'>
-                                                    <a href='/admin/live-broadcast' class='text-xs text-amber-400 hover:text-amber-300 font-medium hover:underline inline-flex items-center gap-1'>
-                                                        Canlı Yayın Ayarlarını Aç →
-                                                    </a>
-                                                </div>
-                                            </div>
-                                        ");
-                                    })
-                                    ->columnSpanFull(),
-                            ]),
-
+                        // 3. Header Davranışı Sekmesi
                         Tab::make('Header Davranışı')
+                            ->icon('heroicon-o-adjustments-horizontal')
                             ->schema([
                                 Toggle::make('header_is_sticky')
                                     ->label('Header Sabit Kalsın (Sticky)')
@@ -205,35 +131,202 @@ class HeaderLayoutPage extends Page implements HasForms
                                     ->helperText('Header üzerinde hızlı arama seçeneğini aktifleştirir.')
                                     ->default(true),
                             ]),
-
-                        Tab::make('Önizleme')
-                            ->schema([
-                                Placeholder::make('header_simulated_preview')
-                                    ->label('Public Header Önizlemesi (Ziyaretçi Görünümü)')
-                                    ->content(function (callable $get) {
-                                        $renderedHeader = view('components.site.header', [
-                                            'preview' => true,
-                                            'siteName' => $get('site_name'),
-                                            'logo' => $get('logo'),
-                                            'logoAltText' => $get('logo_alt_text'),
-                                            'liveButtonVisible' => $get('live_button_is_visible'),
-                                            'liveButtonText' => $get('live_button_text'),
-                                            'headerSticky' => $get('header_is_sticky'),
-                                            'searchVisible' => $get('search_is_visible'),
-                                        ])->render();
-
-                                        return new HtmlString("
-                                            <div class='w-full max-w-[1150px] mx-auto overflow-hidden rounded-xl border border-slate-700/80 shadow-2xl bg-slate-950 p-1'>
-                                                {$renderedHeader}
-                                            </div>
-                                        ");
-                                    })
-                                    ->columnSpanFull(),
-                            ]),
                     ])
                     ->columnSpanFull(),
             ])
             ->statePath('data');
+    }
+
+    public function ensureHeaderPrimaryMenu(): Menu
+    {
+        return Menu::firstOrCreate(
+            ['location' => 'header_primary'],
+            [
+                'name' => 'Ana Üst Menü',
+                'description' => 'Masaüstü ve ana navigasyon header menüsü',
+                'is_active' => true,
+            ]
+        );
+    }
+
+    public function getMenuItemsProperty(): Collection
+    {
+        $menu = $this->ensureHeaderPrimaryMenu();
+        $query = MenuItem::query()
+            ->where('menu_id', $menu->id)
+            ->whereNull('parent_id')
+            ->orderBy('sort_order');
+
+        if (filled($this->menuSearch)) {
+            $searchTerm = trim($this->menuSearch);
+            $query->where('title', 'like', '%' . $searchTerm . '%');
+        }
+
+        return $query->get();
+    }
+
+    public function reorderMenuItems(array $items): void
+    {
+        foreach ($items as $index => $id) {
+            MenuItem::where('id', $id)->update(['sort_order' => $index + 1]);
+        }
+
+        $this->clearMenuCache();
+
+        Notification::make()
+            ->title('Header menü sıralaması güncellendi.')
+            ->success()
+            ->send();
+    }
+
+    public function createMenuItemAction(): Action
+    {
+        return Action::make('createMenuItem')
+            ->label('Yeni Menü Öğesi')
+            ->icon('heroicon-o-plus')
+            ->color('warning')
+            ->modalHeading('Yeni Header Menü Öğesi Ekle')
+            ->modalWidth('lg')
+            ->form($this->getMenuItemFormSchema())
+            ->action(function (array $data) {
+                $menu = $this->ensureHeaderPrimaryMenu();
+                $data['menu_id'] = $menu->id;
+
+                if (($data['item_type'] ?? '') === 'page') {
+                    $data['linked_model_type'] = 'page';
+                }
+
+                if (blank($data['sort_order'] ?? null)) {
+                    $data['sort_order'] = ($menu->items()->whereNull('parent_id')->max('sort_order') ?? 0) + 1;
+                }
+
+                MenuItem::create($data);
+                $this->clearMenuCache();
+
+                Notification::make()
+                    ->title('Menü öğesi başarıyla eklendi.')
+                    ->success()
+                    ->send();
+            });
+    }
+
+    public function editMenuItemAction(): Action
+    {
+        return Action::make('editMenuItem')
+            ->label('Düzenle')
+            ->icon('heroicon-m-pencil-square')
+            ->color('gray')
+            ->outlined()
+            ->size('sm')
+            ->modalHeading('Menü Öğesini Düzenle')
+            ->modalWidth('lg')
+            ->form($this->getMenuItemFormSchema())
+            ->fillForm(function (array $arguments) {
+                $item = MenuItem::find($arguments['item'] ?? null);
+                return $item ? $item->toArray() : [];
+            })
+            ->action(function (array $data, array $arguments) {
+                $item = MenuItem::find($arguments['item'] ?? null);
+                if ($item) {
+                    if (($data['item_type'] ?? '') === 'page') {
+                        $data['linked_model_type'] = 'page';
+                    }
+                    $item->update($data);
+                    $this->clearMenuCache();
+
+                    Notification::make()
+                        ->title('Menü öğesi güncellendi.')
+                        ->success()
+                        ->send();
+                }
+            });
+    }
+
+    public function deleteMenuItemAction(): Action
+    {
+        return Action::make('deleteMenuItem')
+            ->icon('heroicon-m-trash')
+            ->color('gray')
+            ->iconButton()
+            ->size('sm')
+            ->tooltip('Menü Öğesini Sil')
+            ->requiresConfirmation()
+            ->modalHeading('Menü Öğesini Sil')
+            ->modalDescription('Bu menü öğesini header navigasyonundan silmek istediğinizden emin misiniz?')
+            ->action(function (array $arguments) {
+                $item = MenuItem::find($arguments['item'] ?? null);
+                if ($item) {
+                    $item->delete();
+                    $this->clearMenuCache();
+
+                    Notification::make()
+                        ->title('Menü öğesi silindi.')
+                        ->success()
+                        ->send();
+                }
+            });
+    }
+
+    public function getMenuItemFormSchema(): array
+    {
+        return [
+            TextInput::make('title')
+                ->label('Başlık')
+                ->placeholder('Örn: Programlar, Özel Sayfa vb.')
+                ->required()
+                ->maxLength(100),
+
+            Select::make('item_type')
+                ->label('Bağlantı Türü')
+                ->options([
+                    'program_mega_menu' => 'Programlar Mega Menüsü',
+                    'route' => 'İç Rota (Yayın Akışı, Canlı TV vb.)',
+                    'page' => 'Kurumsal / Statik Sayfa',
+                    'url' => 'Özel URL / Dış Bağlantı',
+                    'dropdown' => 'Açılır Menü (Dropdown)',
+                ])
+                ->default('route')
+                ->required()
+                ->live(),
+
+            Select::make('route_name')
+                ->label('Hedef Rota')
+                ->options(MenuItem::ROUTE_NAME_OPTIONS)
+                ->visible(fn ($get) => $get('item_type') === 'route')
+                ->required(fn ($get) => $get('item_type') === 'route'),
+
+            Select::make('linked_model_id')
+                ->label('Kurumsal Sayfa Seçin')
+                ->options(fn () => PageModel::where('page_type', 'corporate')->pluck('title', 'id'))
+                ->visible(fn ($get) => $get('item_type') === 'page')
+                ->required(fn ($get) => $get('item_type') === 'page'),
+
+            TextInput::make('url')
+                ->label('Dış Bağlantı URL')
+                ->placeholder('https://example.com')
+                ->visible(fn ($get) => in_array($get('item_type'), ['url', 'custom']))
+                ->required(fn ($get) => in_array($get('item_type'), ['url', 'custom'])),
+
+            Toggle::make('is_active')
+                ->label('Menüde Göster (Aktif)')
+                ->default(true),
+
+            Toggle::make('open_in_new_tab')
+                ->label('Yeni Sekmede Aç')
+                ->default(false),
+
+            TextInput::make('badge_text')
+                ->label('Rozet Metni (Opsiyonel)')
+                ->placeholder('Yeni, Özel vb.')
+                ->maxLength(20),
+        ];
+    }
+
+    public function clearMenuCache(): void
+    {
+        SiteCache::forgetMenu('header_primary');
+        \App\Services\Menu\ProgramMegaMenuService::forgetCache();
+        Cache::flush();
     }
 
     public function save(): void

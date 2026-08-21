@@ -31,6 +31,21 @@ class ProgramController extends Controller
 
     public function show(Request $request, Program $program): View
     {
+        // Guard: Only allow public, non-archived programs to be viewed publicly
+        $isPublic = (bool) $program->show_on_public && $program->status !== 'archived';
+
+        if (! $isPublic) {
+            $canPreview = auth()->check() && (
+                in_array(auth()->user()->role, ['super_admin', 'administrator', 'editor', 'content_manager', 'designer'], true)
+                && (bool) auth()->user()->is_active
+                && ! auth()->user()->trashed()
+            );
+
+            if (! $canPreview) {
+                abort(404);
+            }
+        }
+
         $program->load([
             'categories',
             'schedules' => fn ($query) => $query->orderBy('day_of_week')->orderBy('start_time'),

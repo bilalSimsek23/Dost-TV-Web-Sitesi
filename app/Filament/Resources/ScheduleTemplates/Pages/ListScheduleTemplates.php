@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\ScheduleTemplates\Pages;
 
+use App\Filament\Concerns\PersistsTablePaginationInUrl;
 use App\Filament\Resources\ScheduleTemplates\ScheduleTemplateResource;
 use Filament\Actions\Action;
 use Filament\Actions\CreateAction;
@@ -9,6 +10,8 @@ use Filament\Resources\Pages\ListRecords;
 
 class ListScheduleTemplates extends ListRecords
 {
+    use PersistsTablePaginationInUrl;
+
     protected static string $resource = ScheduleTemplateResource::class;
 
     protected function getHeaderActions(): array

@@ -140,7 +140,7 @@ class ScheduleExcelImportTest extends TestCase
 
         $this->assertTrue($result['has_errors']);
         $this->assertSame(1, $result['error_count']);
-        $this->assertStringContainsString('Bu program sistemde bulunamadı', $result['errors'][0]['message']);
+        $this->assertStringContainsString('Program sistemde bulunamadı', $result['errors'][0]['message']);
 
         @unlink($file);
     }
@@ -867,7 +867,358 @@ class ScheduleExcelImportTest extends TestCase
         @unlink($file);
     }
 
-    protected function createDostTvMultiDayExcelFile(string $periodName, string $from, string $until, array $daysSchedule): string
+    public function test_standard_template_has_date_format_and_time_format_and_guidance(): void
+    {
+        $service = new ScheduleExcelImportService();
+        $filePath = $service->generateDostTvStandardTemplate();
+
+        $this->assertFileExists($filePath);
+
+        $spreadsheet = IOFactory::load($filePath);
+        $mainSheet = $spreadsheet->getSheetByName('Yayın Akışı');
+        $progSheet = $spreadsheet->getSheetByName('Programlar');
+
+        $this->assertNotNull($mainSheet);
+        $this->assertNotNull($progSheet);
+
+        // 1. Date format dd.mm.yyyy
+        $formatB4 = $mainSheet->getStyle('B4')->getNumberFormat()->getFormatCode();
+        $formatB5 = $mainSheet->getStyle('B5')->getNumberFormat()->getFormatCode();
+        $this->assertSame('dd.mm.yyyy', $formatB4);
+        $this->assertSame('dd.mm.yyyy', $formatB5);
+
+        // 2. Guidance & copy notes in D3:E5
+        $guideVal = $mainSheet->getCell('D3')->getValue();
+        $this->assertStringContainsString('HIZLI KULLANIM', $guideVal);
+        $this->assertStringContainsString('Saat Kopyalama', $guideVal);
+        $this->assertStringNotContainsString('+15 dk', $guideVal);
+
+        // 3. Programlar sheet only has Column A (programs) and Column B (types), NO durations
+        $this->assertNull($progSheet->getCell('C1')->getValue());
+
+        // 4. Column headers are clean 5 columns: Başlangıç, Bitiş, Program, Yayın Türü, Not
+        $this->assertSame('Başlangıç', $mainSheet->getCell('A8')->getValue());
+        $this->assertSame('Bitiş', $mainSheet->getCell('B8')->getValue());
+        $this->assertSame('Program', $mainSheet->getCell('C8')->getValue());
+        $this->assertSame('Yayın Türü', $mainSheet->getCell('D8')->getValue());
+        $this->assertSame('Not', $mainSheet->getCell('E8')->getValue());
+
+        // 5. Time format hh:mm on Start and End data rows (Row 9 is first data row)
+        $formatA9 = $mainSheet->getStyle('A9')->getNumberFormat()->getFormatCode();
+        $formatB9 = $mainSheet->getStyle('B9')->getNumberFormat()->getFormatCode();
+        $this->assertSame('hh:mm', $formatA9);
+        $this->assertSame('hh:mm', $formatB9);
+
+        // 6. First row starts at 0 (00:00) and automatic continuation in A10
+        $this->assertSame(0, $mainSheet->getCell('A9')->getValue());
+        $formulaA10 = $mainSheet->getCell('A10')->getValue();
+        $this->assertStringContainsString('B9', $formulaA10);
+
+        // 7. Program validation on C9 and Broadcast Type validation on D9
+        $progValidation = $mainSheet->getCell('C9')->getDataValidation();
+        $this->assertStringContainsString('Programlar!$A$1:$A$', $progValidation->getFormula1());
+
+        $typeValidation = $mainSheet->getCell('D9')->getDataValidation();
+        $this->assertStringContainsString('Programlar!$B$1:$B$3', $typeValidation->getFormula1());
+
+        @unlink($filePath);
+    }
+
+    public function test_date_cells_with_leading_zeros_and_serials_are_parsed_accurately(): void
+    {
+        $service = new ScheduleExcelImportService();
+
+        // 01.04.2026 to 15.09.2026
+        $file = $this->createDostTvMultiDayExcelFile('Bahar Dönemi 2026', '01.04.2026', '15.09.2026', [
+            0 => [
+                ['00:00', '01:00', 'Bab-ı Reyyan', 'CANLI', ''],
+                ['01:00', '00:00', 'Mukabele', 'TEKRAR', ''],
+            ],
+            1 => [
+                ['00:00', '00:00', 'Bab-ı Reyyan', 'PAKET', ''],
+            ],
+            2 => [
+                ['00:00', '00:00', 'Bab-ı Reyyan', 'CANLI', ''],
+            ],
+            3 => [
+                ['00:00', '00:00', 'Bab-ı Reyyan', 'CANLI', ''],
+            ],
+            4 => [
+                ['00:00', '00:00', 'Bab-ı Reyyan', 'CANLI', ''],
+            ],
+            5 => [
+                ['00:00', '00:00', 'Bab-ı Reyyan', 'CANLI', ''],
+            ],
+            6 => [
+                ['00:00', '00:00', 'Bab-ı Reyyan', 'CANLI', ''],
+            ],
+        ]);
+
+        $result = $service->parseAndValidate($file);
+
+        $this->assertFalse($result['has_errors']);
+        $this->assertNotNull($result['valid_from']);
+        $this->assertNotNull($result['valid_until']);
+        $this->assertSame('2026-04-01', $result['valid_from']->format('Y-m-d'));
+        $this->assertSame('2026-09-15', $result['valid_until']->format('Y-m-d'));
+
+        @unlink($file);
+    }
+
+    public function test_manual_custom_end_times_are_fully_supported(): void
+    {
+        $service = new ScheduleExcelImportService();
+
+        // Manuel specific times like 08:37, 09:10, 10:25
+        $file = $this->createDostTvMultiDayExcelFile('Manuel Saat Testi', '01.09.2026', '31.12.2026', [
+            0 => [
+                ['00:00', '08:37', 'Bab-ı Reyyan', 'Normal', 'Özel Saat 1'],
+                ['08:37', '09:10', 'Mukabele', 'CANLI', 'Özel Saat 2'],
+                ['09:10', '10:25', 'Bab-ı Reyyan', 'TEKRAR', 'Özel Saat 3'],
+                ['10:25', '00:00', 'Mukabele', 'PAKET', 'Geceye Kadar'],
+            ],
+            1 => [['00:00', '00:00', 'Bab-ı Reyyan', 'Normal', '']],
+            2 => [['00:00', '00:00', 'Bab-ı Reyyan', 'Normal', '']],
+            3 => [['00:00', '00:00', 'Bab-ı Reyyan', 'Normal', '']],
+            4 => [['00:00', '00:00', 'Bab-ı Reyyan', 'Normal', '']],
+            5 => [['00:00', '00:00', 'Bab-ı Reyyan', 'Normal', '']],
+            6 => [['00:00', '00:00', 'Bab-ı Reyyan', 'Normal', '']],
+        ]);
+
+        $result = $service->parseAndValidate($file);
+
+        $this->assertFalse($result['has_errors']);
+        $pazartesiRows = array_filter($result['rows'], fn ($r) => $r['day_of_week'] === 0);
+        $times = array_map(fn ($r) => [$r['start_time'], $r['end_time']], array_values($pazartesiRows));
+
+        $this->assertSame([
+            ['00:00', '08:37'],
+            ['08:37', '09:10'],
+            ['09:10', '10:25'],
+            ['10:25', '00:00'],
+        ], $times);
+
+        @unlink($file);
+    }
+
+    public function test_copy_hours_across_days_works_smoothly(): void
+    {
+        $service = new ScheduleExcelImportService();
+
+        // Pazartesi hours copied across all 7 days
+        $baseHours = [
+            ['00:00', '07:30', 'Bab-ı Reyyan', 'Normal', ''],
+            ['07:30', '12:00', 'Mukabele', 'CANLI', ''],
+            ['12:00', '18:00', 'Bab-ı Reyyan', 'TEKRAR', ''],
+            ['18:00', '00:00', 'Mukabele', 'PAKET', ''],
+        ];
+
+        $schedule = [];
+        for ($d = 0; $d < 7; $d++) {
+            $schedule[$d] = $baseHours;
+        }
+
+        $file = $this->createDostTvMultiDayExcelFile('Haftalık Kopyalanan Akış', '01.09.2026', '31.12.2026', $schedule);
+        $result = $service->parseAndValidate($file);
+
+        $this->assertFalse($result['has_errors']);
+        $this->assertSame(28, $result['total_count']);
+        $this->assertSame(28, $result['valid_count']);
+
+        $template = ScheduleTemplate::create([
+            'name' => 'Haftalık Kopyalanan Akış',
+            'slug' => 'haftalik-kopyalanan-akis',
+            'status' => 'draft',
+        ]);
+
+        $imported = $service->importToTemplate($template, $result['rows']);
+        $this->assertSame(28, $imported);
+        $this->assertSame(28, ScheduleTemplateItem::where('schedule_template_id', $template->id)->count());
+
+        @unlink($file);
+    }
+
+    public function test_program_name_with_parenthesis_matches_base_program_with_warning_and_no_error(): void
+    {
+        $aklaKapi = Program::create(['name' => 'Akla Kapı', 'slug' => 'akla-kapi', 'is_active' => true]);
+
+        $service = new ScheduleExcelImportService();
+
+        // "Bab-ı Reyyan (Lemalar)", "Mukabele (Tekrar)", "Akla Kapı (Nevzat Tarhan)"
+        $file = $this->createDostTvMultiDayExcelFile('Parantezli Program Akışı', '01.09.2026', '31.12.2026', [
+            0 => [
+                ['00:00', '08:00', 'Bab-ı Reyyan (Lemalar)', 'Normal', ''],
+                ['08:00', '14:00', 'Mukabele (Tekrar)', 'CANLI', ''],
+                ['14:00', '20:00', 'Akla Kapı (Nevzat Tarhan)', 'PAKET', ''],
+                ['20:00', '00:00', 'Bab-ı Reyyan', 'Normal', ''], // Exact match (no warning)
+            ],
+            1 => [['00:00', '00:00', 'Bab-ı Reyyan', 'Normal', '']],
+            2 => [['00:00', '00:00', 'Bab-ı Reyyan', 'Normal', '']],
+            3 => [['00:00', '00:00', 'Bab-ı Reyyan', 'Normal', '']],
+            4 => [['00:00', '00:00', 'Bab-ı Reyyan', 'Normal', '']],
+            5 => [['00:00', '00:00', 'Bab-ı Reyyan', 'Normal', '']],
+            6 => [['00:00', '00:00', 'Bab-ı Reyyan', 'Normal', '']],
+        ]);
+
+        $result = $service->parseAndValidate($file);
+
+        $this->assertFalse($result['has_errors']);
+        $this->assertTrue($result['has_warnings']);
+        $this->assertSame(3, $result['warning_count']);
+        $this->assertSame(0, $result['error_count']);
+        $this->assertSame(10, $result['total_count']);
+        $this->assertSame(10, $result['valid_count']);
+
+        // Check first row matched Bab-ı Reyyan
+        $row1 = $result['rows'][0];
+        $this->assertSame('warning', $row1['status']);
+        $this->assertSame($this->program1->id, $row1['program_id']);
+        $this->assertSame('Bab-ı Reyyan', $row1['program_name']);
+        $this->assertSame('Bab-ı Reyyan (Lemalar)', $row1['raw_program']);
+        $this->assertStringContainsString('Lemalar', $row1['warnings'][0]);
+
+        // Check template import
+        $template = ScheduleTemplate::create([
+            'name' => 'Parantezli Program Akışı',
+            'slug' => 'parantezli-program-akisi',
+            'status' => 'draft',
+        ]);
+
+        $importedCount = $service->importToTemplate($template, $result['rows']);
+        $this->assertSame(10, $importedCount);
+
+        $this->assertDatabaseHas('schedule_template_items', [
+            'schedule_template_id' => $template->id,
+            'program_id' => $this->program1->id,
+            'day_of_week' => 0,
+            'start_time' => '00:00',
+            'end_time' => '08:00',
+        ]);
+
+        $this->assertDatabaseHas('schedule_template_items', [
+            'schedule_template_id' => $template->id,
+            'program_id' => $aklaKapi->id,
+            'day_of_week' => 0,
+            'start_time' => '14:00',
+            'end_time' => '20:00',
+        ]);
+
+        @unlink($file);
+    }
+
+    public function test_program_name_with_extra_whitespace_and_parenthesis_is_cleaned_and_matched(): void
+    {
+        $service = new ScheduleExcelImportService();
+
+        $file = $this->createDostTvMultiDayExcelFile('Boşluklu Program Akışı', '01.09.2026', '31.12.2026', [
+            0 => [
+                ['00:00', '12:00', '   Bab-ı Reyyan    (Özel Bölüm)  ', 'Normal', ''],
+                ['12:00', '00:00', '  Mukabele  ', 'CANLI', ''],
+            ],
+            1 => [['00:00', '00:00', 'Bab-ı Reyyan', 'Normal', '']],
+            2 => [['00:00', '00:00', 'Bab-ı Reyyan', 'Normal', '']],
+            3 => [['00:00', '00:00', 'Bab-ı Reyyan', 'Normal', '']],
+            4 => [['00:00', '00:00', 'Bab-ı Reyyan', 'Normal', '']],
+            5 => [['00:00', '00:00', 'Bab-ı Reyyan', 'Normal', '']],
+            6 => [['00:00', '00:00', 'Bab-ı Reyyan', 'Normal', '']],
+        ]);
+
+        $result = $service->parseAndValidate($file);
+
+        $this->assertFalse($result['has_errors']);
+        $this->assertSame($this->program1->id, $result['rows'][0]['program_id']);
+        $this->assertSame('Bab-ı Reyyan', $result['rows'][0]['program_name']);
+
+        @unlink($file);
+    }
+
+    public function test_unknown_program_with_parenthesis_fails_with_clear_normalized_error_message(): void
+    {
+        $service = new ScheduleExcelImportService();
+
+        $file = $this->createDostTvMultiDayExcelFile('Bilinmeyen Program Akışı', '01.09.2026', '31.12.2026', [
+            0 => [
+                ['00:00', '12:00', 'Bilinmeyen Program (Deneme)', 'Normal', ''],
+                ['12:00', '00:00', 'Mukabele', 'Normal', ''],
+            ],
+            1 => [['00:00', '00:00', 'Bab-ı Reyyan', 'Normal', '']],
+            2 => [['00:00', '00:00', 'Bab-ı Reyyan', 'Normal', '']],
+            3 => [['00:00', '00:00', 'Bab-ı Reyyan', 'Normal', '']],
+            4 => [['00:00', '00:00', 'Bab-ı Reyyan', 'Normal', '']],
+            5 => [['00:00', '00:00', 'Bab-ı Reyyan', 'Normal', '']],
+            6 => [['00:00', '00:00', 'Bab-ı Reyyan', 'Normal', '']],
+        ]);
+
+        $result = $service->parseAndValidate($file);
+
+        $this->assertTrue($result['has_errors']);
+        $this->assertGreaterThanOrEqual(1, $result['error_count']);
+
+        $errorMessages = array_column($result['errors'], 'message');
+        $foundError = false;
+        foreach ($errorMessages as $msg) {
+            if (str_contains($msg, 'Bilinmeyen Program') && str_contains($msg, 'Normalize edilen ad')) {
+                $foundError = true;
+                break;
+            }
+        }
+
+        $this->assertTrue($foundError, 'Expected normalized error message not found in errors: ' . json_encode($errorMessages));
+
+        @unlink($file);
+    }
+
+    public function test_import_with_only_warnings_allows_schedule_creation_via_livewire(): void
+    {
+        $file = $this->createDostTvMultiDayExcelFile('2026 Uyarı Toleranslı Akış', '01.09.2026', '31.12.2026', [
+            0 => [
+                ['00:00', '12:00', 'Bab-ı Reyyan (Günün Özeti)', 'CANLI', 'Özet'],
+                ['12:00', '00:00', 'Mukabele (Cüz 1)', 'TEKRAR', 'Cüz'],
+            ],
+            1 => [['00:00', '00:00', 'Bab-ı Reyyan', 'Normal', '']],
+            2 => [['00:00', '00:00', 'Bab-ı Reyyan', 'Normal', '']],
+            3 => [['00:00', '00:00', 'Bab-ı Reyyan', 'Normal', '']],
+            4 => [['00:00', '00:00', 'Bab-ı Reyyan', 'Normal', '']],
+            5 => [['00:00', '00:00', 'Bab-ı Reyyan', 'Normal', '']],
+            6 => [['00:00', '00:00', 'Bab-ı Reyyan', 'Normal', '']],
+        ]);
+
+        $uploadedFile = UploadedFile::fake()->createWithContent('test_warnings.xlsx', file_get_contents($file));
+
+        Livewire::actingAs($this->user)
+            ->test(\App\Filament\Resources\ScheduleTemplates\Pages\ScheduleExcelImportPage::class)
+            ->set('data.excel_file', [$uploadedFile])
+            ->call('fetchPreview')
+            ->assertSet('isPreviewLoaded', true)
+            ->assertSet('has_errors', false)
+            ->assertSet('has_warnings', true)
+            ->assertSet('warning_count', 2)
+            ->assertSet('period_name', '2026 Uyarı Toleranslı Akış')
+            ->assertSet('total_count', 8)
+            ->call('createSchedulePeriod')
+            ->assertSet('isImported', true);
+
+        $this->assertDatabaseHas('schedule_templates', [
+            'name' => '2026 Uyarı Toleranslı Akış',
+            'status' => 'draft',
+        ]);
+
+        $this->assertDatabaseHas('schedule_template_items', [
+            'program_id' => $this->program1->id,
+            'is_live' => true,
+            'day_of_week' => 0,
+        ]);
+
+        $this->assertDatabaseHas('schedule_template_items', [
+            'program_id' => $this->program2->id,
+            'is_repeat' => true,
+            'day_of_week' => 0,
+        ]);
+
+        @unlink($file);
+    }
+
+    protected function createDostTvMultiDayExcelFile(string $periodName, mixed $from, mixed $until, array $daysSchedule): string
     {
         $spreadsheet = new Spreadsheet();
         $sheet = $spreadsheet->getActiveSheet();
@@ -878,8 +1229,10 @@ class ScheduleExcelImportTest extends TestCase
         $sheet->setCellValue('B3', $periodName);
         $sheet->setCellValue('A4', 'Başlangıç Tarihi *');
         $sheet->setCellValue('B4', $from);
+        $sheet->getStyle('B4')->getNumberFormat()->setFormatCode('dd.mm.yyyy');
         $sheet->setCellValue('A5', 'Bitiş Tarihi *');
         $sheet->setCellValue('B5', $until);
+        $sheet->getStyle('B5')->getNumberFormat()->setFormatCode('dd.mm.yyyy');
 
         $curRow = 7;
         $dayNames = ['PAZARTESİ', 'SALI', 'ÇARŞAMBA', 'PERŞEMBE', 'CUMA', 'CUMARTESİ', 'PAZAR'];

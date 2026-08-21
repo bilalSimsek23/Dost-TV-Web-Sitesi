@@ -12,8 +12,6 @@ use Filament\Pages\Dashboard;
 use Filament\Panel;
 use Filament\PanelProvider;
 use Filament\Support\Colors\Color;
-use Filament\Widgets\AccountWidget;
-use Filament\Widgets\FilamentInfoWidget;
 use Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse;
 use Illuminate\Cookie\Middleware\EncryptCookies;
 use Illuminate\Foundation\Http\Middleware\VerifyCsrfToken;
@@ -31,6 +29,7 @@ class AdminPanelProvider extends PanelProvider
             ->id('admin')
             ->path('admin')
             ->login()
+            ->passwordReset()
             ->colors([
                 'primary' => Color::Amber,
             ])
@@ -48,9 +47,12 @@ class AdminPanelProvider extends PanelProvider
                 'Kullanıcılar',
                 'Sistem',
             ])
-            ->widgets([
-                AccountWidget::class,
-                FilamentInfoWidget::class,
+            ->widgets([])
+            ->userMenuItems([
+                'profile' => \Filament\Navigation\MenuItem::make()
+                    ->label('Hesabım')
+                    ->url(fn (): string => \App\Filament\Pages\MyProfilePage::getUrl())
+                    ->icon('heroicon-o-user-circle'),
             ])
             ->navigationItems($this->getTopHeaderNavigationItems())
             ->middleware([

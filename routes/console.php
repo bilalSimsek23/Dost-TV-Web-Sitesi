@@ -10,3 +10,8 @@ Artisan::command('inspire', function () {
 Schedule::command('youtube:sync-playlists')
     ->hourly()
     ->withoutOverlapping();
+
+Schedule::command('audit:prune')
+    ->daily()
+    ->withoutOverlapping();
+
