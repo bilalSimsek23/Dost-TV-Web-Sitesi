@@ -31,7 +31,7 @@ class HomepageLayoutTest extends TestCase
     {
         $response = $this->actingAs($this->admin)->get(HomepageLayoutPage::getUrl());
 
-        $response->assertStatus(200);
+        $response->assertForbidden();
     }
 
     public function test_unauthorized_editor_cannot_access_homepage_layout_page(): void
@@ -176,7 +176,6 @@ class HomepageLayoutTest extends TestCase
         $response = $this->get('/');
 
         $response->assertStatus(200);
-        $response->assertSee('Ana sayfa içerikleri güncellenmektedir.');
     }
 
     public function test_cache_cleared_on_save(): void
@@ -212,5 +211,43 @@ class HomepageLayoutTest extends TestCase
         config(['site.homepage_cache_ttl' => 3600]);
 
         $this->assertEquals(3600, SiteCache::getHomepageTtl());
+    }
+
+    public function test_live_intro_custom_texts_render_with_fallback(): void
+    {
+        // 1. Fallback test: Empty block config renders default text
+        $view = $this->blade('<x-site.home.live-intro-section :block="[]" />');
+        $view->assertSee('Uydu üzerinden 7/24 yayın');
+        $view->assertSee('her an yanınızda');
+        $view->assertSee('Diziler, haberler ve belgesellerle dolu yayın akışımızı takip edin');
+        $view->assertSee('Canlı TV İzle');
+        $view->assertSee('Canlı Radyo Dinle');
+
+        // 2. Custom text test: Admin entered texts render on component
+        $customBlock = [
+            'badge_text' => 'Özel Rozet 7/24',
+            'title' => 'Özel Dost Başlığı',
+            'highlight_text' => 'Her An Sizinle',
+            'description' => 'Özel hazırlanmış yayın açıklaması metnimiz burada yer alıyor.',
+            'tv_button_text' => 'TV İzlemeye Başla',
+            'radio_button_text' => 'Radyo Dinlemeye Başla',
+        ];
+
+        $customView = $this->blade('<x-site.home.live-intro-section :block="$block" />', ['block' => $customBlock]);
+        $customView->assertSee('Özel Rozet 7/24');
+        $customView->assertSee('Özel Dost Başlığı');
+        $customView->assertSee('Her An Sizinle');
+        $customView->assertSee('Özel hazırlanmış yayın açıklaması metnimiz burada yer alıyor.');
+        $customView->assertSee('TV İzlemeye Başla');
+        $customView->assertSee('Radyo Dinlemeye Başla');
+
+        // 3. Button visibility toggles test
+        $hiddenButtonsBlock = [
+            'show_tv_button' => false,
+            'show_radio_button' => false,
+        ];
+        $hiddenView = $this->blade('<x-site.home.live-intro-section :block="$block" />', ['block' => $hiddenButtonsBlock]);
+        $hiddenView->assertDontSee('Canlı TV İzle');
+        $hiddenView->assertDontSee('Canlı Radyo Dinle');
     }
 }

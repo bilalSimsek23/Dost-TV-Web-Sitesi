@@ -4,6 +4,9 @@
     'categories' => [],
     'linkUrl' => null,
     'preview' => false,
+    'cardRadius' => null,
+    'showTitle' => true,
+    'cardRatio' => 'default',
 ])
 
 @php
@@ -23,10 +26,18 @@
             }
         }
     }
+    $radiusPx = \App\Services\Home\HomepageBlockRegistry::resolveCardRadiusPx($cardRadius);
+    $aspectClass = match ($cardRatio) {
+        '16:9' => 'aspect-[16/9]',
+        '4:3' => 'aspect-[4/3]',
+        '1:1' => 'aspect-square',
+        '3:4' => 'aspect-[3/4]',
+        default => 'aspect-[3/4]',
+    };
 @endphp
 
-<div class="group block max-w-xs">
-    <div class="aspect-[3/4] overflow-hidden rounded-xl bg-slate-900 ring-1 ring-white/10">
+<div class="group block w-full">
+    <div class="{{ $aspectClass }} overflow-hidden ring-1 ring-white/10" style="background-color: var(--color-surface, #0f172a); border-radius: {{ $radiusPx }}px;">
         @if ($imageUrl)
             <img src="{{ $imageUrl }}" alt="{{ $title }}" loading="lazy" class="h-full w-full object-cover transition duration-300 group-hover:scale-105">
         @else
@@ -35,8 +46,10 @@
             </div>
         @endif
     </div>
-    <p class="mt-3 font-semibold text-white group-hover:text-rose-300">{{ $title ?: 'Program Adı' }}</p>
-    @if (!empty($categories))
-        <p class="text-xs text-slate-500">{{ is_array($categories) ? implode(', ', $categories) : $categories }}</p>
+    @if ($showTitle)
+        <p class="dost-card-title mt-2.5 font-semibold text-white group-hover:opacity-85 transition-opacity truncate">{{ $title ?: 'Program Adı' }}</p>
+        @if (!empty($categories))
+            <p class="dost-card-meta text-xs text-slate-400 truncate">{{ is_array($categories) ? implode(', ', $categories) : $categories }}</p>
+        @endif
     @endif
 </div>

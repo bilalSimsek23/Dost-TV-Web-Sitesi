@@ -4,6 +4,7 @@ namespace App\Filament\Resources\Programs\Schemas;
 
 use App\Models\Episode;
 use App\Models\Program;
+use Filament\Forms\Components\CheckboxList;
 use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Select;
@@ -44,22 +45,53 @@ class ProgramForm
                                     ->label('Yayın Akışı Kısa Tanımı')
                                     ->helperText('Yayın akışında program adının yanında veya altında gösterilen kısa tanıtım metni.')
                                     ->placeholder('Yayın akışında görünecek kısa tanıtım metni...')
-                                    ->maxLength(160)
                                     ->rows(2)
+                                    ->columnSpanFull(),
+
+                                Textarea::make('hero_text')
+                                    ->label('Ana Sayfa Hero Metni')
+                                    ->helperText('Ana sayfadaki büyük program görselinin üzerinde gösterilir. Kısa ve vurucu, tercihen 2–3 satır olmalıdır.')
+                                    ->placeholder('Ana sayfa hero alanında görünecek kısa ve vurucu tanıtım metni...')
+                                    ->rows(2)
+                                    ->columnSpanFull(),
+
+                                Grid::make(2)->schema([
+                                    Toggle::make('is_featured')
+                                        ->label("Hero'da Göster")
+                                        ->helperText("Açık olduğunda program, aktif ve public olduğu sürece ana sayfa Hero slider'ında gösterilir.")
+                                        ->default(false),
+
+                                    TextInput::make('sort_order')
+                                        ->label('Hero Sırası')
+                                        ->numeric()
+                                        ->default(0)
+                                        ->minValue(0)
+                                        ->helperText('Daha küçük sayı Hero\'da daha önce gösterilir. (Örn: 0, 1, 2)'),
+                                ]),
+
+                                CheckboxList::make('hero_days')
+                                    ->label('Hero Günleri')
+                                    ->options([
+                                        'monday' => 'Pazartesi',
+                                        'tuesday' => 'Salı',
+                                        'wednesday' => 'Çarşamba',
+                                        'thursday' => 'Perşembe',
+                                        'friday' => 'Cuma',
+                                        'saturday' => 'Cumartesi',
+                                        'sunday' => 'Pazar',
+                                    ])
+                                    ->columns(4)
+                                    ->helperText("Seçilen günlerde program manuel olarak Hero'ya eklenir. Hiçbir gün seçilmezse 'Hero'da Göster' açık olduğu sürece her gün gösterilir. Bugünün canlı programları bu ayardan bağımsız olarak otomatik Hero'ya gelir.")
                                     ->columnSpanFull(),
 
                                 Textarea::make('description')
                                     ->label('Program Tanıtım Metni')
-                                    ->helperText('Program detay sayfasında ve uygun büyük tanıtım alanlarında gösterilen program açıklaması.')
+                                    ->helperText('Program detay sayfasında gösterilen genel ve detaylı program açıklaması.')
                                     ->placeholder('Program detay sayfasında görünecek detaylı tanıtım açıklaması...')
                                     ->rows(4)
                                     ->columnSpanFull(),
 
-                                Grid::make(3)->schema([
-                                    Toggle::make('is_featured')
-                                        ->label('Öne Çıkan Program')
-                                        ->default(false),
-
+                                Grid::make(2)->schema([
                                     TextInput::make('trailer_url')
                                         ->label('Tanıtım Fragmanı (YouTube URL)')
                                         ->placeholder('https://www.youtube.com/watch?v=...')
@@ -85,12 +117,20 @@ class ProgramForm
                                         ->helperText('Önerilen boyut: 1080 × 1350 px. Maksimum 5 MB.'),
 
                                     FileUpload::make('horizontal_image')
-                                        ->label('Yatay Program Görseli')
+                                        ->label('Ana Sayfa Hero Görseli')
                                         ->image()
                                         ->disk('public')
                                         ->directory('programs')
                                         ->maxSize(5120)
-                                        ->helperText('Önerilen boyut: 1920 × 1080 px (16:9). Maksimum 5 MB.'),
+                                        ->helperText('Ana sayfadaki büyük program alanında kullanılır. Önerilen oran: 1920×700 px. Program adı, yayın günü ve saatini görselin içine yazmayın.'),
+
+                                    FileUpload::make('mobile_hero_image')
+                                        ->label('Mobil Hero Görseli')
+                                        ->image()
+                                        ->disk('public')
+                                        ->directory('programs')
+                                        ->maxSize(5120)
+                                        ->helperText('Mobil ana sayfa Hero görünümünde kullanılır (768px altı ekranlar). Tanımlanmazsa Yatay Hero Görseli otomatik olarak kullanılır. Önerilen boyut: 1080×1350 px.'),
 
                                     FileUpload::make('program_logo')
                                         ->label('Program Logosu')
@@ -100,13 +140,13 @@ class ProgramForm
                                         ->maxSize(5120)
                                         ->helperText('Önerilen format: Şeffaf PNG veya WEBP. Maksimum 5 MB.'),
 
-                                    FileUpload::make('default_episode_image')
-                                        ->label('Varsayılan Bölüm Görseli')
+                                     FileUpload::make('default_episode_image')
+                                        ->label('Yayın Akışı / Varsayılan Bölüm Görseli')
                                         ->image()
                                         ->disk('public')
                                         ->directory('episodes')
                                         ->maxSize(5120)
-                                        ->helperText('Görseli olmayan bölümler için kullanılır (1920 × 1080 px). Maksimum 5 MB.'),
+                                        ->helperText('Yayın Akışı sayfasında kullanılan yatay program görselidir. Önerilen boyut: 1920×1080 px. Bu alan Ana Sayfa Hero Görseli ve Program Kapak Görselinden bağımsızdır.'),
                                 ]),
                             ]),
 
@@ -137,22 +177,6 @@ class ProgramForm
                                     ->helperText('Google ve arama motorları için özel açıklama. Boş bırakılırsa Program Tanıtım Metni kullanılır.')
                                     ->rows(3)
                                     ->placeholder('Programın Google arama sonuçlarında görünecek özel SEO özeti'),
-                            ]),
-
-                        Tab::make('Önizleme')
-                            ->schema([
-                                Placeholder::make('program_preview')
-                                    ->hiddenLabel()
-                                    ->content(function (?Program $record, callable $get) {
-                                        $coverImage = $get('cover_image') ?? ($record ? $record->cover_image : null);
-
-                                        return view('components.site.program-card', [
-                                            'preview' => true,
-                                            'title' => $get('name') ?? ($record ? $record->name : 'Program Adı'),
-                                            'coverImage' => $coverImage,
-                                        ]);
-                                    })
-                                    ->columnSpanFull(),
                             ]),
                     ])
                     ->columnSpanFull(),

@@ -33,6 +33,9 @@
                     <th class="fi-ta-header-cell px-4 py-3.5 text-start">
                         <span class="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Sayfa</span>
                     </th>
+                    <th class="fi-ta-header-cell w-40 px-4 py-3.5 text-center">
+                        <span class="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Footer Görünürlüğü</span>
+                    </th>
                     <th class="fi-ta-header-cell w-48 px-4 py-3.5 text-end">
                         <span class="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">İşlem</span>
                     </th>
@@ -76,6 +79,19 @@
                             </a>
                         </td>
 
+                        {{-- Footer Görünürlüğü Toggle --}}
+                        <td class="px-4 py-3.5 text-center align-middle whitespace-nowrap">
+                            <button
+                                type="button"
+                                wire:click="toggleFooterVisibility({{ $page->id }})"
+                                class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium transition cursor-pointer {{ $page->show_in_footer ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300 hover:bg-emerald-200' : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400 hover:bg-gray-200' }}"
+                                title="Footer görünürlüğünü değiştirmek için tıklayın"
+                            >
+                                <span class="w-1.5 h-1.5 rounded-full {{ $page->show_in_footer ? 'bg-emerald-500' : 'bg-gray-400' }}"></span>
+                                {{ $page->show_in_footer ? 'Footer\'da Gösteriliyor' : 'Gizli' }}
+                            </button>
+                        </td>
+
                         {{-- İşlemler --}}
                         <td class="px-4 py-3.5 text-end align-middle whitespace-nowrap">
                             <div class="flex items-center justify-end gap-2">
@@ -104,7 +120,7 @@
                     </tr>
                 @empty
                     <tr>
-                        <td colspan="3" class="p-8 text-center text-sm text-gray-500 dark:text-gray-400">
+                        <td colspan="4" class="p-8 text-center text-sm text-gray-500 dark:text-gray-400">
                             Arama kriterine uygun kurumsal bilgi bulunamadı.
                         </td>
                     </tr>

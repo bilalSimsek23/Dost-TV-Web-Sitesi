@@ -4,23 +4,37 @@
 @section('description', filled($program->meta_description) ? e(trim($program->meta_description)) : \Illuminate\Support\Str::limit(strip_tags($program->description ?? ''), 160))
 
 @section('content')
+    <x-site.admin-edit-bar :program="$program" />
     @php
-        $firstEpisode = ($hasSeries ?? false)
-            ? ($seriesGroups->first()?->episodes->first() ?? $unassignedEpisodes->first() ?? $program->episodes->first())
-            : $program->episodes->first();
-        $initialSrc = $program->trailer_embed_url
-            ?? ($firstEpisode?->video_source === 'youtube' ? $firstEpisode?->youtube_embed_url : null);
-        $initialVideoSrc = (!$initialSrc && $firstEpisode?->video_source === 'upload' && $firstEpisode?->video_path)
-            ? asset('storage/' . $firstEpisode->video_path)
+        $featured = $featuredEpisode;
+
+        $initialSrc = ($featured?->video_source === 'youtube' && filled($featured?->youtube_embed_url))
+            ? $featured->youtube_embed_url
             : null;
+
+        $initialVideoSrc = (!$initialSrc && $featured?->video_source === 'upload' && filled($featured?->video_path))
+            ? asset('storage/' . $featured->video_path)
+            : null;
+
+        // Fallback to program trailer embed URL if no public video exists
+        if (!$initialSrc && !$initialVideoSrc && filled($program->trailer_embed_url)) {
+            $initialSrc = $program->trailer_embed_url;
+        }
     @endphp
 
-    <section class="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
-        <a href="{{ route('programs.index') }}" class="text-sm font-semibold text-rose-400 hover:text-rose-300">&larr; Programlar</a>
+    <section class="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8 space-y-10">
+        {{-- Breadcrumb --}}
+        <div>
+            <a href="{{ route('programs.index') }}" class="inline-flex items-center text-sm font-semibold text-rose-400 hover:text-rose-300 transition-colors">
+                &larr; Programlar
+            </a>
+        </div>
 
-        <div class="mt-6 grid gap-10 lg:grid-cols-3">
-            <div class="lg:col-span-2">
-                <div class="aspect-video overflow-hidden rounded-2xl bg-black ring-1 ring-white/10">
+        {{-- TOP SECTION: SOL (Video Player + Categories) & SAĞ (Program Name + Description) --}}
+        <div class="grid gap-8 lg:grid-cols-3 items-start">
+            {{-- SOL: Video/Player Alanı ve Altında Sadece Kategoriler --}}
+            <div class="lg:col-span-2 space-y-4">
+                <div class="aspect-video overflow-hidden rounded-2xl bg-black ring-1 ring-white/10 shadow-2xl">
                     @if ($initialSrc)
                         <iframe id="program-player-iframe" src="{{ $initialSrc }}"
                                 class="h-full w-full" allowfullscreen
@@ -30,7 +44,7 @@
                         <iframe id="program-player-iframe" class="hidden h-full w-full" allowfullscreen></iframe>
                         <video id="program-player-video" src="{{ $initialVideoSrc }}" class="h-full w-full" controls></video>
                     @else
-                        <div class="flex h-full w-full items-center justify-center text-slate-600">
+                        <div class="flex h-full w-full items-center justify-center text-slate-500 text-sm">
                             Bu program için henüz video eklenmedi.
                         </div>
                         <iframe id="program-player-iframe" class="hidden"></iframe>
@@ -38,100 +52,55 @@
                     @endif
                 </div>
 
-                <h1 class="mt-6 text-3xl font-black text-white">{{ $program->name }}</h1>
+                {{-- VİDEONUN ALTINDA: Sadece program kategori etiketleri --}}
                 @if ($program->categories->isNotEmpty())
-                    <div class="mt-2 flex flex-wrap gap-2">
+                    <div class="flex flex-wrap gap-2 pt-1">
                         @foreach ($program->categories as $category)
-                            <span class="inline-block rounded-full bg-white/5 px-3 py-1 text-xs font-semibold text-rose-300 ring-1 ring-inset ring-white/10">
+                            <span class="inline-flex items-center rounded-full bg-rose-500/10 px-3 py-1 text-xs font-semibold text-rose-300 ring-1 ring-inset ring-rose-500/20">
                                 {{ $category->name }}
                             </span>
                         @endforeach
                     </div>
                 @endif
-                @if ($program->description)
-                    <p class="mt-4 max-w-3xl text-slate-400">{{ $program->description }}</p>
-                @endif
             </div>
 
-            <aside class="space-y-6">
-                <div class="rounded-2xl border border-white/10 bg-white/[0.03] p-6">
-                    <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-400">Yayın Saatleri</h2>
-                    <ul class="mt-4 space-y-2">
-                        @forelse ($program->schedules as $schedule)
-                            <li class="flex items-center justify-between text-sm">
-                                <span class="text-slate-300">{{ $schedule->day_name }}</span>
-                                <span class="font-semibold text-rose-300">
-                                    {{ \Illuminate\Support\Carbon::parse($schedule->start_time)->format('H:i') }}
-                                </span>
-                            </li>
-                        @empty
-                            <li class="text-sm text-slate-500">Yayın akışı henüz planlanmadı.</li>
-                        @endforelse
-                    </ul>
-                </div>
-            </aside>
-        </div>
+            {{-- SAĞ: Program Adı & Açıklaması --}}
+            <div class="rounded-2xl border border-white/10 bg-white/[0.03] p-6 md:p-8 space-y-4 shadow-xl backdrop-blur-md">
+                <h1 class="text-2xl sm:text-3xl font-extrabold text-white tracking-tight leading-tight">
+                    {{ $program->name }}
+                </h1>
 
-        @if (!empty($hasSeasons) && $seasonItems->isNotEmpty())
-            {{-- Fixed "Sezonlar" Section with Dynamic Selection Boxes --}}
-            <div class="mt-16">
-                <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-4 border-b border-white/10">
-                    <div>
-                        <h2 class="text-2xl font-bold text-white tracking-tight">Sezonlar</h2>
-                        <p class="text-sm text-slate-400 mt-1">İzlemek istediğiniz sezonu seçin.</p>
-                    </div>
-                    @if ($selectedSeasonItem)
-                        <div class="text-xs font-semibold text-rose-300 bg-rose-950/40 border border-rose-800/40 px-3 py-1.5 rounded-full self-start sm:self-auto">
-                            Seçili: {{ $selectedSeasonItem->label }} · {{ $selectedSeasonItem->total_episodes }} Bölüm
-                        </div>
-                    @endif
-                </div>
-
-                @if ($seasonItems->count() > 1)
-                    <div class="mt-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
-                        @foreach ($seasonItems as $item)
-                            @php
-                                $isActive = ($selectedSeasonItem && $selectedSeasonItem->key === $item->key);
-                            @endphp
-                            <a href="{{ $item->url }}"
-                               class="group relative flex items-center justify-between p-4 rounded-xl transition-all duration-200 {{ $isActive ? 'bg-gradient-to-r from-rose-900/60 to-rose-950/80 border-rose-500/60 shadow-lg shadow-rose-950/50 ring-1 ring-rose-500/50' : 'bg-white/[0.03] hover:bg-white/[0.07] border-white/10 text-slate-300 hover:text-white' }} border">
-                                <div class="flex items-center gap-3">
-                                    <div class="w-2.5 h-2.5 rounded-full {{ $isActive ? 'bg-rose-500 animate-pulse' : 'bg-slate-600 group-hover:bg-slate-400' }}"></div>
-                                    <div>
-                                        <div class="font-bold text-base text-white group-hover:text-rose-300 transition-colors">
-                                            {{ $item->label }}
-                                        </div>
-                                        <div class="text-xs text-slate-400 mt-0.5">
-                                            {{ $item->total_episodes }} Bölüm
-                                        </div>
-                                    </div>
-                                </div>
-                                <span class="text-xs font-semibold px-2.5 py-1 rounded-lg transition-colors {{ $isActive ? 'bg-rose-500/30 text-rose-200 border border-rose-400/30' : 'bg-white/5 text-slate-400 group-hover:bg-white/10 group-hover:text-slate-200' }}">
-                                    {{ $isActive ? 'Seçili' : 'Görüntüle' }}
-                                </span>
-                            </a>
-                        @endforeach
-                    </div>
-                @else
-                    @php
-                        $singleItem = $seasonItems->first();
-                    @endphp
-                    <div class="mt-4 inline-flex items-center gap-3 px-4 py-2 rounded-xl bg-white/[0.03] border border-white/10 text-sm">
-                        <span class="font-semibold text-white">{{ $singleItem->label }}</span>
-                        <span class="text-xs text-slate-400 bg-white/10 px-2 py-0.5 rounded-md">{{ $singleItem->total_episodes }} Bölüm</span>
+                @if (filled($program->description))
+                    <div class="text-sm md:text-base text-slate-300 leading-relaxed whitespace-pre-line border-t border-white/10 pt-4">
+                        {{ $program->description }}
                     </div>
                 @endif
+            </div>
+        </div>
+
+        {{-- SEZONLAR / SERİLER SEÇİCİ --}}
+        @if (!empty($hasSeasons) && $seasonItems->isNotEmpty())
+            <div class="pt-2">
+                <x-site.program-season-selector
+                    :has-seasons="$hasSeasons"
+                    :season-items="$seasonItems"
+                    :selected-season-item="$selectedSeasonItem"
+                />
             </div>
         @endif
 
-        {{-- Video Archive Grid --}}
+        {{-- VİDEO ARŞİVİ GRID --}}
         @if ($episodes->isNotEmpty())
-            <div class="{{ (!empty($hasSeasons) && $seasonItems->isNotEmpty()) ? 'mt-12' : 'mt-16' }}">
-                <div class="flex items-center justify-between gap-4 mb-6">
+            @php
+                $featuredIndex = $episodes->search(fn ($ep) => $ep->id === $featuredEpisode?->id);
+                $initialLimit = ($featuredIndex !== false && $featuredIndex >= 24) ? ($featuredIndex + 1) : 24;
+            @endphp
+            <div x-data="{ limit: {{ $initialLimit }}, total: {{ $episodes->count() }} }" class="pt-2">
+                <div class="flex items-center justify-between gap-4 mb-6 border-b border-white/10 pb-4">
                     <div>
-                        <h2 class="text-2xl font-bold text-white tracking-tight">Video Arşivi</h2>
+                        <h2 class="text-xl md:text-2xl font-bold text-white tracking-tight">Video Arşivi</h2>
                         @if ($selectedSeasonItem)
-                            <p class="text-sm text-slate-400 mt-1">
+                            <p class="text-xs md:text-sm text-slate-400 mt-0.5">
                                 {{ $selectedSeasonItem->label }} videoları listeleniyor
                             </p>
                         @endif
@@ -143,18 +112,21 @@
 
                 {{-- 4-Column Responsive Video Grid: Desktop 4, Tablet 3, Mobile 2 --}}
                 <div class="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-5">
-                    @foreach ($episodes as $episode)
+                    @foreach ($episodes as $index => $episode)
                         @php
+                            $isFeaturedActive = ($featuredEpisode && $featuredEpisode->id === $episode->id);
                             $episodeLabel = $episode->episode_number
                                 ? $episode->episode_number . '. Bölüm'
                                 : $episode->title;
                         @endphp
                         <button type="button"
-                                class="episode-select group text-left flex flex-col cursor-pointer"
+                                x-show="{{ $index }} < limit"
+                                x-cloak
+                                class="episode-select group text-left flex flex-col cursor-pointer p-1.5 rounded-xl transition duration-200 {{ $isFeaturedActive ? 'bg-rose-950/40 ring-2 ring-rose-500 shadow-lg shadow-rose-950/50' : '' }}"
                                 title="{{ $episode->title }}"
                                 data-type="{{ $episode->video_source === 'youtube' ? 'iframe' : 'video' }}"
                                 data-src="{{ $episode->video_source === 'youtube' ? $episode->youtube_embed_url : ($episode->video_path ? asset('storage/' . $episode->video_path) : '') }}">
-                            <div class="aspect-video w-full overflow-hidden rounded-xl bg-slate-900 ring-1 ring-white/10 relative group-hover:ring-rose-500/50 transition duration-200">
+                            <div class="aspect-video w-full overflow-hidden rounded-xl bg-slate-900 ring-1 {{ $isFeaturedActive ? 'ring-rose-500' : 'ring-white/10' }} relative group-hover:ring-rose-500/50 transition duration-200">
                                 @if ($episode->thumbnail_url)
                                     <img src="{{ $episode->thumbnail_url }}" alt="{{ $episodeLabel }}"
                                          class="h-full w-full object-cover transition duration-300 group-hover:scale-105" loading="lazy">
@@ -163,6 +135,12 @@
                                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="h-8 w-8">
                                             <path d="M8 5v14l11-7z" />
                                         </svg>
+                                    </div>
+                                @endif
+
+                                @if ($isFeaturedActive)
+                                    <div class="absolute top-2 left-2 rounded-md bg-rose-600 px-2 py-0.5 text-[10px] font-bold text-white shadow">
+                                        Oynatılıyor
                                     </div>
                                 @endif
 
@@ -175,16 +153,25 @@
                                 </div>
                             </div>
                             <div class="mt-2.5">
-                                <p class="text-sm font-semibold text-white group-hover:text-rose-300 transition-colors line-clamp-1">
+                                <p class="text-sm font-semibold {{ $isFeaturedActive ? 'text-rose-400' : 'text-white' }} group-hover:text-rose-300 transition-colors line-clamp-1">
                                     {{ $episodeLabel }}
                                 </p>
                             </div>
                         </button>
                     @endforeach
                 </div>
+
+                {{-- Show More Button --}}
+                <div x-show="limit < total" class="mt-10 text-center">
+                    <button type="button"
+                            @click="limit += 24"
+                            class="inline-flex items-center justify-center rounded-xl bg-rose-600 hover:bg-rose-500 px-6 py-3 text-sm font-bold text-white shadow-lg shadow-rose-950/50 transition duration-200 active:scale-95 border border-rose-500/50 focus:outline-none">
+                        Daha Fazla Göster
+                    </button>
+                </div>
             </div>
         @else
-            <div class="mt-12 rounded-2xl border border-white/10 bg-white/[0.02] p-8 text-center text-slate-500">
+            <div class="mt-8 rounded-2xl border border-white/10 bg-white/[0.02] p-8 text-center text-slate-500">
                 Bu {{ (!empty($hasSeasons) && $seasonItems->isNotEmpty()) ? 'sezon' : 'program' }} için video bulunamadı.
             </div>
         @endif

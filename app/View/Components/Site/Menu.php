@@ -27,7 +27,11 @@ class Menu extends Component
 
     public function render(): View
     {
+        $siteSettings = \App\Models\SiteSetting::current();
+        $liveButtonVisible = ($siteSettings->live_button_is_visible ?? true) && ($siteSettings->live_tv_is_public ?? true);
+
         return view('components.site.menu', [
+            'liveButtonVisible' => $liveButtonVisible,
             'megaMenuCategories' => $this->megaMenuData['categories'] ?? collect(),
             'megaMenuCategoryDetails' => $this->megaMenuData['category_details'] ?? [],
         ]);

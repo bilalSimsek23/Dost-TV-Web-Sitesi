@@ -37,6 +37,13 @@ return [
 
     'youtube' => [
         'key' => env('YOUTUBE_API_KEY'),
+        'api_key' => env('YOUTUBE_API_KEY'),
+    ],
+
+    'instagram' => [
+        'access_token' => env('INSTAGRAM_ACCESS_TOKEN', env('META_GRAPH_ACCESS_TOKEN')),
+        'app_id' => env('INSTAGRAM_APP_ID'),
+        'client_token' => env('INSTAGRAM_CLIENT_TOKEN'),
     ],
 
 ];

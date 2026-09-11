@@ -16,7 +16,10 @@ class HomeController extends Controller
             'homepageSections' => $data['sections'],
             'banners' => $data['banners'],
             'featuredPrograms' => $data['featuredPrograms'],
+            'heroPrograms' => $data['heroPrograms'],
             'todaySchedule' => $data['todaySchedule'],
+            'resolvedBlockData' => $data['resolvedBlockData'] ?? [],
+            'fixedSettings' => $data['fixedSettings'] ?? [],
         ]);
     }
 }

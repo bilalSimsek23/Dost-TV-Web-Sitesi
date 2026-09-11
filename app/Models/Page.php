@@ -77,6 +77,21 @@ class Page extends Model
                 $page->slug = Str::slug($page->title);
             }
         });
+
+        static::deleting(function (Page $page) {
+            $protectedSystemSlugs = [
+                'dost-tv-yayin-ilkeleri',
+                'yayinci-kunye-bilgisi',
+                'neden-dost-tv',
+                'dost-vakfi-hesap-numaralari',
+                'kisisel-verilerin-korunmasi-ve-gizlilik-politikasi',
+                'iletisim',
+            ];
+
+            if (in_array($page->slug, $protectedSystemSlugs, true) || $page->template === 'contact') {
+                throw new \RuntimeException("Sistem kurumsal sayfası ('{$page->title}') silinemez.");
+            }
+        });
     }
 
     public function getRouteKeyName(): string
@@ -102,5 +117,59 @@ class Page extends Model
     public function scopePublished($query)
     {
         return $query->where('status', 'published');
+    }
+
+    public function getGoogleMapsEmbedUrlAttribute(): ?string
+    {
+        $settings = $this->settings ?? [];
+        $embed = $settings['map_embed_url'] ?? null;
+        if (blank($embed)) {
+            return null;
+        }
+
+        if (preg_match('/src=["\']([^"\']+)["\']/', $embed, $matches)) {
+            $url = $matches[1];
+        } else {
+            $url = trim($embed);
+        }
+
+        $allowedPrefixes = [
+            'https://www.google.com/maps/embed',
+            'https://maps.google.com/maps',
+            'https://www.google.com/maps?',
+            'https://maps.google.com/?',
+        ];
+
+        foreach ($allowedPrefixes as $prefix) {
+            if (str_starts_with($url, $prefix)) {
+                return $url;
+            }
+        }
+
+        return null;
+    }
+
+    public function isMapEnabled(): bool
+    {
+        $settings = $this->settings ?? [];
+        return (bool) ($settings['map_enabled'] ?? true);
+    }
+
+    public function getMapTitle(): string
+    {
+        $settings = $this->settings ?? [];
+        return $settings['map_title'] ?? 'DOST TV';
+    }
+
+    public function getMapHeight(): int
+    {
+        $settings = $this->settings ?? [];
+        $height = (int) ($settings['map_height'] ?? 320);
+        return ($height >= 150 && $height <= 800) ? $height : 320;
+    }
+
+    public function getResolvedDesignAttribute(): array
+    {
+        return \App\Support\PageDesignResolver::resolve($this);
     }
 }

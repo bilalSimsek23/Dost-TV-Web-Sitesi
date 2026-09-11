@@ -208,7 +208,7 @@ class AnnouncementPopupAndPlacementTest extends TestCase
 
         $response = $this->get('/');
         $response->assertOk();
-        $response->assertSee('z-[70]');
+        $response->assertSee('z-[9990]');
         $response->assertSee('localStorage.getItem(this.storageKey)');
         $response->assertSee('localStorage.setItem(this.storageKey, Date.now().toString())');
         $response->assertSee('24 * 60 * 60 * 1000');
@@ -237,10 +237,11 @@ class AnnouncementPopupAndPlacementTest extends TestCase
         $homeResponse->assertSee('Popup sisteminin düzgün çalışıp çalışmadığını test ediyoruz.');
         $homeResponse->assertSee('Yayın Akışına Git');
         $homeResponse->assertSee('href="/yayin-akisi"', false);
-        $homeResponse->assertSee('z-[70]');
+        $homeResponse->assertSee('z-[9990]');
         $homeResponse->assertSee("document.body.style.overflow = 'hidden'", false);
         $homeResponse->assertSee("document.body.style.overflow = ''", false);
-        $homeResponse->assertSee("dosttv_announcement_dismissed_{$announcement->id}");
+        $updatedAt = $announcement->updated_at->timestamp;
+        $homeResponse->assertSee("dosttv_announcement_dismissed_{$announcement->id}_{$updatedAt}");
 
         // 3. Verify placement isolation
         $scheduleResponse = $this->get('/yayin-akisi');

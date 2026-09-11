@@ -25,8 +25,8 @@
     }
 @endphp
 
-<div class="w-full max-w-[1100px] mx-auto overflow-hidden rounded-2xl border border-slate-700/80 shadow-2xl bg-slate-950 relative"
-     style="width: 100%; max-width: 1100px; aspect-ratio: 16 / 9; position: relative; overflow: hidden; border-radius: 16px; background: #0f172a;">
+<div class="w-full max-w-[1100px] mx-auto overflow-hidden rounded-2xl border border-theme shadow-2xl relative"
+     style="width: 100%; max-width: 1100px; aspect-ratio: 16 / 9; position: relative; overflow: hidden; border-radius: 16px; background: var(--color-surface, #0f172a);">
 
     @if($imgUrl)
         <!-- Case 1: Görsel VARSA -> Yalnızca Görsel Önizlemesi -->

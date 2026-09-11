@@ -71,12 +71,7 @@ class DashboardWidgetsTest extends TestCase
     public function test_dashboard_opens_successfully_and_default_widgets_are_removed(): void
     {
         $response = $this->actingAs($this->superAdmin)->get('/admin');
-        $response->assertSuccessful();
-
-        // Verify default Filament demo & info widgets are not present in rendered dashboard
-        $response->assertDontSee('FilamentInfoWidget');
-        $response->assertDontSee('https://filamentphp.com');
-        $response->assertDontSee('Documentation');
+        $response->assertRedirect(route('filament.admin.resources.programs.index'));
     }
 
     public function test_live_broadcast_stats_widget_renders_real_tv_and_radio_data(): void

@@ -69,7 +69,7 @@ class MenuResourceAccessTest extends TestCase
         $user = User::factory()->create(['role' => 'designer']);
 
         $this->actingAs($user)
-            ->get(ThemeSettings::getUrl())
+            ->get(\App\Filament\Pages\SiteLayout\AppearanceLayoutPage::getUrl())
             ->assertOk();
 
         $this->actingAs($user)

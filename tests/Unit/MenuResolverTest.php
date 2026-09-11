@@ -29,7 +29,7 @@ class MenuResolverTest extends TestCase
 
     public function test_resolves_page_item_to_pages_show_route(): void
     {
-        $page = Page::create(['title' => 'İletişim', 'content' => 'Merhaba']);
+        $page = Page::firstOrCreate(['slug' => 'iletisim'], ['title' => 'İletişim', 'content' => 'Merhaba']);
 
         $item = MenuItem::create([
             'menu_id' => $this->menu->id,

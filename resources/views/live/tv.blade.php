@@ -54,8 +54,8 @@
             </div>
         @elseif ($settings->live_tv_type === 'hls')
             {{-- HLS Video Player with Backup & Error Container --}}
-            <div class="mt-8 aspect-video relative overflow-hidden rounded-2xl bg-black ring-1 ring-white/10">
-                <video id="hls-player" class="h-full w-full" controls autoplay muted
+            <div class="mt-8 relative overflow-hidden rounded-2xl ring-1 ring-white/10">
+                <video id="hls-player" class="w-full h-auto block rounded-2xl" controls autoplay muted playsinline
                        data-src="{{ $settings->live_tv_url }}"
                        data-backup-src="{{ $settings->live_tv_backup_url }}"
                        data-error-msg="{{ $settings->live_tv_error_message ?: 'Canlı yayın şu anda yüklenemiyor. Lütfen daha sonra tekrar deneyin.' }}"></video>

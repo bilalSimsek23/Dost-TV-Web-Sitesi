@@ -15,3 +15,7 @@ Schedule::command('audit:prune')
     ->daily()
     ->withoutOverlapping();
 
+Schedule::command('analytics:prune')
+    ->daily()
+    ->withoutOverlapping();
+

@@ -142,6 +142,18 @@ class YouTubePlaylistImportService
             $pageToken = $responseData['nextPageToken'] ?? null;
         } while (filled($pageToken) && count($items) < self::MAX_PLAYLIST_IMPORT_ITEMS);
 
+        // Batch fetch YouTube video statistics (viewCount, likeCount, commentCount)
+        $videoIds = array_column($items, 'video_id');
+        $statsMap = $this->fetchVideoStatistics($videoIds);
+
+        foreach ($items as &$item) {
+            $vId = $item['video_id'];
+            $item['view_count'] = $statsMap[$vId]['view_count'] ?? null;
+            $item['like_count'] = $statsMap[$vId]['like_count'] ?? null;
+            $item['comment_count'] = $statsMap[$vId]['comment_count'] ?? null;
+        }
+        unset($item);
+
         // Sort items chronologically by published_at ASC (Oldest -> Newest)
         usort($items, function ($a, $b) {
             $timeA = ! empty($a['published_at']) ? strtotime($a['published_at']) : 0;
@@ -157,5 +169,51 @@ class YouTubePlaylistImportService
             'total_items' => count($items),
             'items' => $items,
         ];
+    }
+
+    /**
+     * Batch fetch video statistics (viewCount, likeCount, commentCount) from YouTube API.
+     *
+     * @param array<int, string> $videoIds
+     * @return array<string, array{view_count: ?int, like_count: ?int, comment_count: ?int}>
+     */
+    public function fetchVideoStatistics(array $videoIds): array
+    {
+        $apiKey = config('services.youtube.key') ?: env('YOUTUBE_API_KEY');
+        if (blank($apiKey) || empty($videoIds)) {
+            return [];
+        }
+
+        $statsMap = [];
+        $chunks = array_chunk(array_unique(array_filter($videoIds)), 50);
+
+        foreach ($chunks as $chunk) {
+            try {
+                $response = Http::timeout(10)->get('https://www.googleapis.com/youtube/v3/videos', [
+                    'part' => 'statistics',
+                    'id' => implode(',', $chunk),
+                    'key' => $apiKey,
+                ]);
+
+                if ($response->successful()) {
+                    $rawItems = $response->json('items', []);
+                    foreach ($rawItems as $item) {
+                        $vId = $item['id'] ?? null;
+                        $stats = $item['statistics'] ?? [];
+                        if ($vId) {
+                            $statsMap[$vId] = [
+                                'view_count' => isset($stats['viewCount']) ? (int) $stats['viewCount'] : null,
+                                'like_count' => isset($stats['likeCount']) ? (int) $stats['likeCount'] : null,
+                                'comment_count' => isset($stats['commentCount']) ? (int) $stats['commentCount'] : null,
+                            ];
+                        }
+                    }
+                }
+            } catch (\Throwable $e) {
+                Log::warning("YouTube Video Statistics Fetch Error: {$e->getMessage()}");
+            }
+        }
+
+        return $statsMap;
     }
 }

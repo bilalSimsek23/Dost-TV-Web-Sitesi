@@ -28,21 +28,11 @@ class HomepageLayoutPage extends Page implements HasForms
 
     protected string $view = 'filament.pages.site-layout.homepage-layout';
 
-    protected static ?string $navigationLabel = 'Ana Sayfa Düzeni';
-
-    protected static string|\UnitEnum|null $navigationGroup = 'Site Düzeni';
-
-    protected static ?int $navigationSort = 1;
-
-    protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedHome;
-
-    protected static ?string $title = 'Ana Sayfa Düzen Yönetimi';
-
-    protected static ?string $slug = 'site-layout/homepage';
+    protected static bool $shouldRegisterNavigation = false;
 
     public static function canAccess(): bool
     {
-        return auth()->user()?->hasAnyRole(['super_admin', 'administrator', 'designer']) ?? false;
+        return false;
     }
 
     public ?array $data = [];
@@ -124,6 +114,7 @@ class HomepageLayoutPage extends Page implements HasForms
                                             'settings' => $homepageData['settings'],
                                             'banners' => $homepageData['banners'],
                                             'featuredPrograms' => $homepageData['featuredPrograms'],
+                                            'heroPrograms' => $homepageData['heroPrograms'],
                                             'todaySchedule' => $homepageData['todaySchedule'],
                                         ]);
                                     }),

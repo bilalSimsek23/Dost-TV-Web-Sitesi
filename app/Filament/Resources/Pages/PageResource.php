@@ -20,13 +20,13 @@ class PageResource extends Resource
 
     protected static string|\UnitEnum|null $navigationGroup = 'İçerik Yönetimi';
 
-    protected static ?string $navigationLabel = 'Kurumsal Bilgiler';
+    protected static ?string $navigationLabel = 'Sayfalar';
 
-    protected static ?string $modelLabel = 'Kurumsal Bilgi';
+    protected static ?string $modelLabel = 'Sayfa';
 
-    protected static ?string $pluralModelLabel = 'Kurumsal Bilgiler';
+    protected static ?string $pluralModelLabel = 'Sayfalar';
 
-    protected static ?int $navigationSort = 1;
+    protected static ?int $navigationSort = 5;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedDocumentText;
 

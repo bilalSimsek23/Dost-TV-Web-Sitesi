@@ -29,6 +29,7 @@
             :preview="true"
             :phone="$phone"
             :email="$email"
+            :recommended-sites="$recommendedSites ?? []"
             :facebook-url="$facebookUrl"
             :instagram-url="$instagramUrl"
             :x-url="$xUrl"

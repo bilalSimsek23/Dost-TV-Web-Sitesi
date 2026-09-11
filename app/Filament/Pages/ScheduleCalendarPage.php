@@ -200,6 +200,23 @@ class ScheduleCalendarPage extends Page implements HasActions, HasForms, HasTabl
         $this->resetTable();
     }
 
+    public function toggleShowProgramNames(): void
+    {
+        $template = $this->selectedTemplate;
+        if (! $template) {
+            return;
+        }
+
+        $template->show_program_names = ! ($template->show_program_names ?? true);
+        $template->save();
+
+        Notification::make()
+            ->title('Program İsimleri Görünürlüğü Güncellendi')
+            ->body($template->show_program_names ? 'Program isimleri public yayın akışında gösterilecek.' : 'Program isimleri public yayın akışında gizlendi.')
+            ->success()
+            ->send();
+    }
+
     public function updatedSelectedTemplateId($value): void
     {
         $this->selectedTemplateId = (int) $value;

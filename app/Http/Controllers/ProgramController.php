@@ -4,7 +4,6 @@ namespace App\Http\Controllers;
 
 use App\Models\Category;
 use App\Models\Program;
-use App\Models\ProgramSeries;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
 
@@ -12,20 +11,35 @@ class ProgramController extends Controller
 {
     public function index(Request $request): View
     {
+        $categorySlug = $request->string('kategori')->toString();
+
+        $activeCategoryModel = blank($categorySlug) ? null : Category::query()
+            ->where('slug', $categorySlug)
+            ->where('is_active', true)
+            ->first();
+
+        $validCategorySlug = $activeCategoryModel ? $activeCategoryModel->slug : '';
+
         $programs = Program::query()
             ->with('categories')
             ->where('is_active', true)
-            ->when($request->string('kategori')->isNotEmpty(), function ($query) use ($request) {
-                $query->whereHas('categories', fn ($q) => $q->where('slug', $request->string('kategori')));
+            ->when(! empty($validCategorySlug), function ($query) use ($validCategorySlug) {
+                $query->whereHas('categories', fn ($q) => $q->where('slug', $validCategorySlug)->where('is_active', true));
             })
             ->orderBy('sort_order')
             ->paginate(12)
             ->withQueryString();
 
+        $categories = Category::query()
+            ->where('is_active', true)
+            ->where('slug', '!=', Category::ALL_CATEGORIES_SLUG)
+            ->orderBy('sort_order')
+            ->get();
+
         return view('programs.index', [
             'programs' => $programs,
-            'categories' => Category::orderBy('name')->get(),
-            'activeCategory' => $request->string('kategori')->toString(),
+            'categories' => $categories,
+            'activeCategory' => $validCategorySlug,
         ]);
     }
 
@@ -57,6 +71,35 @@ class ProgramController extends Controller
         $selectedItem = null;
         $episodes = collect();
 
+        $requestedSeries = $request->query('series', $request->query('seri'));
+        $requestedSeason = $request->query('season', $request->query('sezon'));
+        $requestedYear = $request->query('year', $request->query('yil'));
+        $requestedEpisodeId = $request->query('episode', $request->query('bolum', $request->query('v')));
+
+        $targetEpisode = null;
+        if (filled($requestedEpisodeId)) {
+            $targetEpisode = $program->episodes()
+                ->where('id', $requestedEpisodeId)
+                ->where('is_active', true)
+                ->where('show_on_public', true)
+                ->where(function ($q) {
+                    $q->whereNull('status')->orWhere('status', 'published');
+                })
+                ->first();
+
+            if ($targetEpisode) {
+                if (filled($targetEpisode->program_series_id)) {
+                    $requestedSeries = $targetEpisode->program_series_id;
+                }
+                if (filled($targetEpisode->season_number)) {
+                    $requestedSeason = $targetEpisode->season_number;
+                }
+                if (filled($targetEpisode->season_year)) {
+                    $requestedYear = $targetEpisode->season_year;
+                }
+            }
+        }
+
         if ($hasSeries) {
             // Series-based program (e.g. Beraber Okuyalım)
             $seriesList = $program->programSeries()
@@ -76,7 +119,6 @@ class ProgramController extends Controller
                 ->get();
 
             foreach ($seriesList as $series) {
-                // Series Label: series name is the primary label for series items
                 if (filled($series->name)) {
                     $label = (string) $series->name;
                 } elseif (filled($series->season_year)) {
@@ -104,14 +146,47 @@ class ProgramController extends Controller
                 ]);
             }
 
-            // Check if there are unassigned episodes
-            $unassignedCount = $program->episodes()
+            $unassignedEpisodes = $program->episodes()
                 ->whereNull('program_series_id')
                 ->where('is_active', true)
                 ->where('show_on_public', true)
+                ->get(['season_number', 'season_year']);
+
+            $unassignedSeasons = $unassignedEpisodes
+                ->filter(fn ($e) => filled($e->season_number) || filled($e->season_year))
+                ->groupBy(fn ($e) => $e->season_number . '|' . $e->season_year);
+
+            foreach ($unassignedSeasons as $group) {
+                $seasonNumber = $group->first()->season_number;
+                $seasonYear = $group->first()->season_year;
+
+                $seasonRecord = \App\Models\ProgramSeason::findSeason($program->id, $seasonNumber, $seasonYear);
+                $label = $seasonRecord?->public_label
+                    ?? (filled($seasonYear) ? (string) $seasonYear : (filled($seasonNumber) ? 'Sezon ' . $seasonNumber : 'Genel'));
+
+                $seasonItems->push((object) [
+                    'key' => 'season_' . $seasonNumber . '_' . ($seasonYear ?? ''),
+                    'type' => 'season',
+                    'id' => null,
+                    'slug' => null,
+                    'name' => null,
+                    'season_number' => $seasonNumber,
+                    'season_year' => $seasonYear,
+                    'label' => $label,
+                    'total_episodes' => $group->count(),
+                    'url' => route('programs.show', array_filter([
+                        'program' => $program,
+                        'season' => $seasonNumber,
+                        'year' => $seasonYear,
+                    ])),
+                ]);
+            }
+
+            $bareCount = $unassignedEpisodes
+                ->filter(fn ($e) => blank($e->season_number) && blank($e->season_year))
                 ->count();
 
-            if ($unassignedCount > 0) {
+            if ($bareCount > 0) {
                 $seasonItems->push((object) [
                     'key' => 'unassigned',
                     'type' => 'unassigned',
@@ -121,7 +196,7 @@ class ProgramController extends Controller
                     'season_number' => null,
                     'season_year' => null,
                     'label' => 'Diğer Bölümler',
-                    'total_episodes' => $unassignedCount,
+                    'total_episodes' => $bareCount,
                     'url' => route('programs.show', [
                         'program' => $program,
                         'seri' => 'diger-bolumler',
@@ -130,10 +205,6 @@ class ProgramController extends Controller
             }
 
             if ($seasonItems->isNotEmpty()) {
-                $requestedSeries = $request->query('series', $request->query('seri'));
-                $requestedSeason = $request->query('season', $request->query('sezon'));
-                $requestedYear = $request->query('year', $request->query('yil'));
-
                 if (filled($requestedSeries)) {
                     $selectedItem = $seasonItems->first(function ($item) use ($requestedSeries) {
                         return (string) $item->id === (string) $requestedSeries
@@ -167,6 +238,23 @@ class ProgramController extends Controller
                         ->where('program_series_id', $selectedItem->id)
                         ->where('is_active', true)
                         ->where('show_on_public', true)
+                        ->where(function ($q) {
+                            $q->whereNull('status')->orWhere('status', 'published');
+                        })
+                        ->orderByRaw('CASE WHEN episode_number IS NULL THEN 1 ELSE 0 END')
+                        ->orderBy('episode_number', 'asc')
+                        ->orderBy('aired_at', 'asc')
+                        ->get();
+                } elseif ($selectedItem->type === 'season') {
+                    $episodes = $program->episodes()
+                        ->whereNull('program_series_id')
+                        ->where('is_active', true)
+                        ->where('show_on_public', true)
+                        ->where(function ($q) {
+                            $q->whereNull('status')->orWhere('status', 'published');
+                        })
+                        ->where('season_number', $selectedItem->season_number)
+                        ->when($selectedItem->season_year, fn ($q) => $q->where('season_year', $selectedItem->season_year))
                         ->orderByRaw('CASE WHEN episode_number IS NULL THEN 1 ELSE 0 END')
                         ->orderBy('episode_number', 'asc')
                         ->orderBy('aired_at', 'asc')
@@ -174,8 +262,13 @@ class ProgramController extends Controller
                 } elseif ($selectedItem->type === 'unassigned') {
                     $episodes = $program->episodes()
                         ->whereNull('program_series_id')
+                        ->whereNull('season_number')
+                        ->whereNull('season_year')
                         ->where('is_active', true)
                         ->where('show_on_public', true)
+                        ->where(function ($q) {
+                            $q->whereNull('status')->orWhere('status', 'published');
+                        })
                         ->orderByRaw('CASE WHEN episode_number IS NULL THEN 1 ELSE 0 END')
                         ->orderBy('episode_number', 'asc')
                         ->orderBy('aired_at', 'asc')
@@ -188,18 +281,33 @@ class ProgramController extends Controller
                 ->whereNotNull('season_number')
                 ->where('is_active', true)
                 ->where('show_on_public', true)
+                ->where(function ($q) {
+                    $q->whereNull('status')->orWhere('status', 'published');
+                })
                 ->selectRaw('season_number, season_year, count(*) as total_episodes')
                 ->groupBy('season_number', 'season_year')
                 ->orderByDesc('season_number')
                 ->get();
 
+            // Merge empty defined seasons from programSeasons table
+            $definedSeasons = $program->programSeasons()->get();
+            foreach ($definedSeasons as $ds) {
+                $exists = $rawSeasons->contains(fn ($s) => (string) $s->season_number === (string) $ds->season_number && (string) $s->season_year === (string) $ds->season_year);
+                if (! $exists) {
+                    $rawSeasons->push((object) [
+                        'season_number' => $ds->season_number,
+                        'season_year' => $ds->season_year,
+                        'total_episodes' => 0,
+                    ]);
+                }
+            }
+
             if ($rawSeasons->isNotEmpty()) {
                 foreach ($rawSeasons as $s) {
-                    // Label Rule:
-                    // A) season_year filled -> season_year
-                    // B) season_year empty, series.name filled -> series.name
-                    // C) both empty -> "Sezon {$season_number}"
-                    if (filled($s->season_year)) {
+                    $seasonRecord = \App\Models\ProgramSeason::findSeason($program->id, $s->season_number, $s->season_year);
+                    if ($seasonRecord?->public_label) {
+                        $label = $seasonRecord->public_label;
+                    } elseif (filled($s->season_year)) {
                         $label = (string) $s->season_year;
                     } elseif (filled($s->season_number)) {
                         $label = 'Sezon ' . $s->season_number;
@@ -224,9 +332,6 @@ class ProgramController extends Controller
                         ])),
                     ]);
                 }
-
-                $requestedSeason = $request->query('season', $request->query('sezon'));
-                $requestedYear = $request->query('year', $request->query('yil'));
 
                 if (filled($requestedSeason) && filled($requestedYear)) {
                     $selectedItem = $seasonItems->first(function ($item) use ($requestedSeason, $requestedYear) {
@@ -253,6 +358,9 @@ class ProgramController extends Controller
                 $episodes = $program->episodes()
                     ->where('is_active', true)
                     ->where('show_on_public', true)
+                    ->where(function ($q) {
+                        $q->whereNull('status')->orWhere('status', 'published');
+                    })
                     ->where('season_number', $selectedItem->season_number)
                     ->when($selectedItem->season_year, fn ($q) => $q->where('season_year', $selectedItem->season_year))
                     ->orderByRaw('CASE WHEN episode_number IS NULL THEN 1 ELSE 0 END')
@@ -264,18 +372,104 @@ class ProgramController extends Controller
                 $episodes = $program->episodes()
                     ->where('is_active', true)
                     ->where('show_on_public', true)
-                    ->orderBy('sort_order')
+                    ->where(function ($q) {
+                        $q->whereNull('status')->orWhere('status', 'published');
+                    })
+                    ->orderByRaw('CASE WHEN aired_at IS NULL THEN 1 ELSE 0 END')
                     ->orderByDesc('aired_at')
+                    ->orderByDesc('created_at')
+                    ->orderByDesc('id')
                     ->get();
             }
         }
 
+        if ($targetEpisode) {
+            $featuredEpisode = $targetEpisode;
+            if ($episodes->doesntContain('id', $targetEpisode->id)) {
+                $episodes = $episodes->prepend($targetEpisode);
+            }
+        } else {
+            $featuredEpisode = $episodes->first();
+        }
+
+        // --- FAZ 1B: Program Detail Visual Builder Integration ---
+        try {
+            $layout = null;
+            $previewLayoutId = $request->query('preview_layout_id');
+
+            if (filled($previewLayoutId) && auth()->check()) {
+                $layout = HomepageLayout::query()
+                    ->where('id', $previewLayoutId)
+                    ->where('page_type', 'program_detail')
+                    ->first();
+            }
+
+            if (! $layout) {
+                $layout = SiteCache::rememberProgramDetailLayout(function () {
+                    return HomepageLayout::query()
+                        ->where('page_type', 'program_detail')
+                        ->where('is_active', true)
+                        ->first();
+                });
+            }
+
+            $sections = [];
+            if ($layout) {
+                $sections = (filled($previewLayoutId) && auth()->check())
+                    ? ($layout->draft_sections ?? [])
+                    : ($layout->published_sections ?? []);
+            }
+
+            unset($sections['_fixed_settings']);
+            $sections = array_values(array_filter($sections, fn ($s) => is_array($s) && ! empty($s['visible'] ?? true)));
+
+            if ($layout && ! empty($sections)) {
+                $relatedPrograms = Program::query()
+                    ->where('is_active', true)
+                    ->where('show_on_public', true)
+                    ->where('status', '!=', 'archived')
+                    ->where('id', '!=', $program->id)
+                    ->whereHas('categories', function ($q) use ($program) {
+                        $catIds = $program->categories->pluck('id')->toArray();
+                        $q->whereIn('categories.id', $catIds);
+                    })
+                    ->take(8)
+                    ->get();
+
+                if ($relatedPrograms->isEmpty()) {
+                    $relatedPrograms = Program::query()
+                        ->where('is_active', true)
+                        ->where('show_on_public', true)
+                        ->where('status', '!=', 'archived')
+                        ->where('id', '!=', $program->id)
+                        ->take(8)
+                        ->get();
+                }
+
+                return view('programs.show_builder', [
+                    'program' => $program,
+                    'hasSeasons' => $seasonItems->isNotEmpty(),
+                    'seasonItems' => $seasonItems,
+                    'selectedSeasonItem' => $selectedItem,
+                    'episodes' => $episodes,
+                    'featuredEpisode' => $featuredEpisode,
+                    'relatedPrograms' => $relatedPrograms,
+                    'sections' => $sections,
+                    'preview' => filled($previewLayoutId),
+                ]);
+            }
+        } catch (\Throwable $e) {
+            // Fallback gracefully on any render or resolution error
+        }
+
+        // Legacy Fallback View
         return view('programs.show', [
             'program' => $program,
             'hasSeasons' => $seasonItems->isNotEmpty(),
             'seasonItems' => $seasonItems,
             'selectedSeasonItem' => $selectedItem,
             'episodes' => $episodes,
+            'featuredEpisode' => $featuredEpisode,
         ]);
     }
 }

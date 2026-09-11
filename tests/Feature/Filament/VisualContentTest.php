@@ -84,11 +84,16 @@ class VisualContentTest extends TestCase
             'is_active' => false,
         ]);
 
-        $response = $this->get('/');
-        $response->assertStatus(200);
-        $response->assertSee('Aktif Slayt');
-        $response->assertDontSee('Süresi Dolan Slayt');
-        $response->assertDontSee('Pasif Slayt');
+        // Public homepage hero artık program/yayın akışı verisiyle render ediliyor,
+        // banner içeriğini göstermiyor; filtreleme mantığı burada veri katmanında doğrulanır.
+        $banners = app(\App\Services\Home\HomepageDataService::class)
+            ->getHomepageData()['banners'];
+
+        $this->assertTrue($banners->contains('title', 'Aktif Slayt'));
+        $this->assertFalse($banners->contains('title', 'Süresi Dolan Slayt'));
+        $this->assertFalse($banners->contains('title', 'Pasif Slayt'));
+
+        $this->get('/')->assertStatus(200);
     }
 
     public function test_replication_creates_duplicate_with_kopya_suffix_and_inactive_status(): void

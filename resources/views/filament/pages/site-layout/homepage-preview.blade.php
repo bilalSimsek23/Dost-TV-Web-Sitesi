@@ -4,12 +4,18 @@
         <span class="rounded bg-slate-800 px-2 py-0.5 text-[10px]">Gerçek Bileşenler</span>
     </div>
 
+    {{-- Fixed Hero Section --}}
+    <x-site.home.hero-section :today-schedule="$todaySchedule" :hero-programs="$heroPrograms" :block="$fixedSettings['hero'] ?? []" />
+
+    {{-- Builder Blocks --}}
     <x-site.homepage-sections
         :sections="$homepageSections"
         :banners="$banners"
         :settings="$settings"
         :today-schedule="$todaySchedule"
         :featured-programs="$featuredPrograms"
+        :hero-programs="$heroPrograms"
+        :resolved-block-data="$resolvedBlockData ?? []"
         :preview="true"
     />
 </div>

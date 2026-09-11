@@ -16,6 +16,7 @@ class ScheduleTemplate extends Model
         'status' => 'draft',
         'priority' => 1,
         'is_active' => false,
+        'show_program_names' => true,
     ];
 
     protected $fillable = [
@@ -28,6 +29,7 @@ class ScheduleTemplate extends Model
         'status',
         'version',
         'is_active',
+        'show_program_names',
     ];
 
     protected $casts = [
@@ -36,6 +38,7 @@ class ScheduleTemplate extends Model
         'priority' => 'integer',
         'version' => 'integer',
         'is_active' => 'boolean',
+        'show_program_names' => 'boolean',
     ];
 
     public const STATUSES = [

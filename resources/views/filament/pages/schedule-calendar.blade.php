@@ -243,9 +243,20 @@
                                         {{ $t->name }}
                                     </option>
                                 @endforeach
-                            </optgroup>
                         @endif
                     </select>
+
+                    @if($currentTemplate)
+                        <button type="button"
+                                wire:click="toggleShowProgramNames"
+                                style="display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.375rem 0.75rem; border-radius: 0.5rem; font-size: 0.75rem; font-weight: 700; border: 1px solid rgba(255,255,255,0.12); cursor: pointer; transition: all 0.15s ease; {{ ($currentTemplate->show_program_names ?? true) ? 'background: rgba(52, 211, 153, 0.15); color: #34d399; border-color: rgba(52, 211, 153, 0.3);' : 'background: rgba(148, 163, 184, 0.15); color: #94a3b8; border-color: rgba(148, 163, 184, 0.3);' }}"
+                                title="Public /yayin-akisi sayfasında program adlarının gösterimini açıp kapatın">
+                            <span>Program İsimleri:</span>
+                            <span style="padding: 2px 6px; border-radius: 9999px; font-size: 0.6875rem; font-weight: 800; {{ ($currentTemplate->show_program_names ?? true) ? 'background: #34d399; color: #020617;' : 'background: #64748b; color: #f8fafc;' }}">
+                                {{ ($currentTemplate->show_program_names ?? true) ? 'AÇIK' : 'KAPALI' }}
+                            </span>
+                        </button>
+                    @endif
                 </div>
 
                 @if($currentTemplate)

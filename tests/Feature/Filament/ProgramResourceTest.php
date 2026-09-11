@@ -58,7 +58,6 @@ class ProgramResourceTest extends TestCase
                 'short_description' => 'Kısa açıklama metni',
                 'description' => 'Detaylı açıklama metni',
                 'youtube_channel_url' => 'https://www.youtube.com/@dosttv',
-                'is_featured' => true,
                 'meta_title' => 'Yeni Program SEO Başlığı',
                 'meta_description' => 'Yeni Program SEO Açıklaması',
             ])
@@ -72,7 +71,6 @@ class ProgramResourceTest extends TestCase
             'youtube_channel_url' => 'https://www.youtube.com/@dosttv',
             'meta_title' => 'Yeni Program SEO Başlığı',
             'meta_description' => 'Yeni Program SEO Açıklaması',
-            'is_featured' => true,
         ]);
     }
 
@@ -161,7 +159,7 @@ class ProgramResourceTest extends TestCase
         Livewire::actingAs($this->admin)
             ->test(ListPrograms::class)
             ->assertTableActionExists('edit')
-            ->assertTableActionExists('preview')
+            ->assertTableActionDoesNotExist('preview')
             ->assertTableActionExists('archive')
             ->assertTableActionDoesNotExist('open_episodes')
             ->assertTableActionDoesNotExist('add_episode')
@@ -218,28 +216,20 @@ class ProgramResourceTest extends TestCase
         $this->assertEquals('archived', $fresh->status);
     }
 
-    public function test_featured_toggle_column_toggles_is_featured_on_single_click(): void
+    public function test_program_hero_fields_managed_in_form(): void
     {
         $program = Program::create([
-            'name' => 'Öne Çıkan Aday Program',
-            'slug' => 'one-cikan-aday-program',
+            'name' => 'Test Program',
+            'slug' => 'test-program',
             'status' => 'active',
             'is_featured' => false,
+            'sort_order' => 0,
         ]);
 
-        // First click: false -> true
         Livewire::actingAs($this->admin)
-            ->test(ListPrograms::class)
-            ->callTableColumnAction('is_featured', $program);
-
-        $this->assertTrue($program->fresh()->is_featured);
-
-        // Second click: true -> false
-        Livewire::actingAs($this->admin)
-            ->test(ListPrograms::class)
-            ->callTableColumnAction('is_featured', $program);
-
-        $this->assertFalse($program->fresh()->is_featured);
+            ->test(\App\Filament\Resources\Programs\Pages\EditProgram::class, ['record' => $program->getRouteKey()])
+            ->assertFormFieldExists('is_featured')
+            ->assertFormFieldExists('sort_order');
     }
 
     public function test_archive_category_and_management_archive_status_are_independent(): void
@@ -406,7 +396,7 @@ class ProgramResourceTest extends TestCase
         ]);
     }
 
-    public function test_preview_action_generates_correct_public_url(): void
+    public function test_public_preview_and_view_on_site_action(): void
     {
         $hikmet = Program::create([
             'name' => 'Hikmet Arayışları',
@@ -432,7 +422,13 @@ class ProgramResourceTest extends TestCase
 
         Livewire::actingAs($this->admin)
             ->test(ListPrograms::class)
-            ->assertTableActionExists('preview');
+            ->assertTableColumnExists('is_featured')
+            ->assertTableColumnExists('sort_order')
+            ->assertTableActionDoesNotExist('preview');
+
+        Livewire::actingAs($this->admin)
+            ->test(\App\Filament\Resources\Programs\Pages\EditProgram::class, ['record' => $hikmet->getRouteKey()])
+            ->assertActionExists('view_on_site');
     }
 
     public function test_searching_programs_preserves_valid_edit_record_url(): void

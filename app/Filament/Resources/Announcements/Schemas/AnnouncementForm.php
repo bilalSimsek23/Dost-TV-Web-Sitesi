@@ -14,6 +14,7 @@ use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Schemas\Components\Grid;
+use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Tabs;
 use Filament\Schemas\Components\Tabs\Tab;
 use Filament\Schemas\Schema;
@@ -170,28 +171,55 @@ class AnnouncementForm
                                             default => 'Tarih girilmezse süresiz gösterilir.',
                                         };
                                     }),
-                            ]),
 
-                        Tab::make('Önizleme')
-                            ->schema([
-                                Placeholder::make('preview_card')
-                                    ->label('Ziyaretçi Görünümü Önizlemesi')
-                                    ->content(function (?Announcement $record, callable $get) {
-                                        return new \Illuminate\Support\HtmlString(
-                                            \Illuminate\Support\Facades\Blade::render(
-                                                '<x-site.announcement-popup :preview="true" :announcement="$record" :title="$title" :message="$message" :image="$image" :button-text="$buttonText" :button-url="$buttonUrl" />',
-                                                [
-                                                    'record' => $record,
-                                                    'title' => $get('title') ?? ($record ? $record->title : 'Duyuru Başlığı'),
-                                                    'message' => $get('message') ?? ($record ? $record->message : null),
-                                                    'image' => $get('image') ?? ($record ? $record->image : null),
-                                                    'buttonText' => $get('button_text') ?? ($record ? $record->button_text : null),
-                                                    'buttonUrl' => $get('button_url') ?? ($record ? $record->button_url : null),
-                                                ]
-                                            )
-                                        );
-                                    })
-                                    ->columnSpanFull(),
+                                Section::make('POPUP DAVRANIŞI')
+                                    ->schema([
+                                        Toggle::make('popup_settings.dismissible')
+                                            ->label('Kullanıcı Kapatabilsin')
+                                            ->default(true),
+
+                                        Toggle::make('popup_settings.backdrop_close')
+                                            ->label('Arka Plana Tıklayınca Kapat')
+                                            ->default(false),
+
+                                        Toggle::make('popup_settings.esc_close')
+                                            ->label('ESC Tuşu ile Kapat')
+                                            ->default(true),
+
+                                        Select::make('popup_settings.repeat_mode')
+                                            ->label('Tekrar Gösterim Sıklığı')
+                                            ->options([
+                                                'every_visit' => 'Her Ziyarette Göster',
+                                                'session' => 'Oturum Boyunca Bir Kez',
+                                                '24_hours' => 'Kapattıktan Sonra 24 Saat Gösterme',
+                                                'until_updated' => 'Kullanıcı Kapatınca Duyuru Güncellenene Kadar Gösterme',
+                                            ])
+                                            ->default('24_hours')
+                                            ->afterStateHydrated(fn (Select $component, $state) => empty($state) ? $component->state('24_hours') : null),
+
+                                        TextInput::make('popup_settings.delay_seconds')
+                                            ->label('Açılma Gecikmesi (Saniye)')
+                                            ->numeric()
+                                            ->minValue(0)
+                                            ->maxValue(300)
+                                            ->default(0)
+                                            ->helperText('Popup açılmadan önce kaç saniye bekleneceğini belirler.'),
+
+                                        Toggle::make('popup_settings.auto_close_enabled')
+                                            ->label('Otomatik Kapat')
+                                            ->default(false)
+                                            ->live(),
+
+                                        TextInput::make('popup_settings.auto_close_seconds')
+                                            ->label('Otomatik Kapanma Süresi (Saniye)')
+                                            ->numeric()
+                                            ->minValue(1)
+                                            ->maxValue(3600)
+                                            ->default(5)
+                                            ->visible(fn (callable $get) => (bool) $get('popup_settings.auto_close_enabled'))
+                                            ->helperText('Belirtilen süreden sonra popup kendiliğinden kapanır.'),
+                                    ])
+                                    ->columns(2),
                             ]),
                     ])
                     ->columnSpanFull(),

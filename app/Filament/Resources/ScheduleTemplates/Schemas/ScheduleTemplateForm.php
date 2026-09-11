@@ -52,7 +52,7 @@ class ScheduleTemplateForm
                                 }),
                         ]),
 
-                        Grid::make(2)->schema([
+                        Grid::make(3)->schema([
                             Select::make('status')
                                 ->label('Durum')
                                 ->options([
@@ -67,6 +67,11 @@ class ScheduleTemplateForm
                                 ->label('Varsayılan Dönem (Aktif)')
                                 ->default(false)
                                 ->helperText('Aktif yapıldığında diğer tüm dönemlerin varsayılan durumu kaldırılır.'),
+
+                            Toggle::make('show_program_names')
+                                ->label('Program İsimlerini Göster')
+                                ->default(true)
+                                ->helperText('Kapalı olduğunda public /yayin-akisi sayfasında program adları gizlenir.'),
                         ]),
                     ]),
             ]);

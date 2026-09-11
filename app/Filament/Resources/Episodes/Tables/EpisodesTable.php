@@ -13,6 +13,8 @@ use Filament\Forms\Components\TextInput;
 use Filament\Notifications\Notification;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Filters\SelectFilter;
+use Filament\Tables\Filters\TernaryFilter;
 use Filament\Tables\Table;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\HtmlString;
@@ -140,6 +142,26 @@ class EpisodesTable
                     ->date('d.m.Y')
                     ->placeholder('-')
                     ->sortable(),
+            ])
+            ->filters([
+                SelectFilter::make('program_id')
+                    ->label('Program')
+                    ->relationship('program', 'name')
+                    ->searchable(),
+
+                SelectFilter::make('status')
+                    ->label('Bölüm Durumu')
+                    ->options(Episode::STATUSES),
+
+                TernaryFilter::make('show_on_public')
+                    ->label('Public Görünürlük'),
+
+                SelectFilter::make('video_source')
+                    ->label('Video Kaynağı')
+                    ->options([
+                        'youtube' => 'YouTube Video',
+                        'local' => 'Sunucu / Yükleme',
+                    ]),
             ])
             ->actions([
                 Action::make('edit_season')
@@ -699,6 +721,21 @@ class EpisodesTable
                             ->duration(2500)
                             ->send();
                     }),
+            ])
+            ->filters([
+                SelectFilter::make('status')
+                    ->label('Bölüm Durumu')
+                    ->options(Episode::STATUSES),
+
+                TernaryFilter::make('show_on_public')
+                    ->label('Public Görünürlük'),
+
+                SelectFilter::make('video_source')
+                    ->label('Video Kaynağı')
+                    ->options([
+                        'youtube' => 'YouTube Video',
+                        'local' => 'Sunucu / Yükleme',
+                    ]),
             ])
             ->actions([
                 EditAction::make(),

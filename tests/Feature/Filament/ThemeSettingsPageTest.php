@@ -2,12 +2,11 @@
 
 namespace Tests\Feature\Filament;
 
-use App\Filament\Pages\ThemeSettings;
-use App\Models\ThemeSetting;
+use App\Filament\Pages\SiteLayout\AppearanceLayoutPage;
+use App\Models\FontFamily;
+use App\Models\SiteSetting;
 use App\Models\User;
-use App\Services\Theme\ThemeSettingsService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Support\Facades\Cache;
 use Livewire\Livewire;
 use Tests\TestCase;
 
@@ -22,61 +21,42 @@ class ThemeSettingsPageTest extends TestCase
         parent::setUp();
 
         $this->admin = User::factory()->create(['role' => 'super_admin']);
-
-        ThemeSetting::create([
-            'key' => 'color.primary',
-            'group' => 'colors',
-            'value' => '#be123c',
-            'value_type' => 'color',
-            'label' => 'Ana Renk',
-        ]);
-        ThemeSetting::create([
-            'key' => 'brand.site_name',
-            'group' => 'brand',
-            'value' => 'Dost TV',
-            'value_type' => 'text',
-            'label' => 'Site Adı',
+        FontFamily::create([
+            'name' => 'Instrument Sans',
+            'slug' => 'instrument-sans',
+            'source_type' => 'google_fonts',
+            'is_default' => true,
+            'is_active' => true,
         ]);
     }
 
     public function test_theme_settings_can_be_saved(): void
     {
+        $newTheme = [
+            'mode' => 'dark',
+            'dark' => [
+                'background' => '#111111',
+                'surface' => '#222222',
+                'accent' => '#f43f5e',
+            ],
+            'light' => [
+                'background' => '#ffffff',
+                'surface' => '#ffffff',
+                'accent' => '#e11d48',
+            ],
+        ];
+
         Livewire::actingAs($this->admin)
-            ->test(ThemeSettings::class)
-            ->set('data.color.primary', '#111111')
-            ->set('data.brand.site_name', 'Dost TV Güncel')
+            ->test(AppearanceLayoutPage::class)
+            ->set('data.theme_settings', $newTheme)
             ->call('save')
             ->assertHasNoFormErrors();
 
-        $service = app(ThemeSettingsService::class);
-
-        $this->assertSame('#111111', $service->get('color.primary'));
-        $this->assertSame('Dost TV Güncel', $service->get('brand.site_name'));
+        $this->assertSame('#111111', SiteSetting::current()->fresh()->normalized_theme_settings['dark']['background']);
     }
 
-    public function test_invalid_color_value_is_rejected(): void
+    public function test_legacy_theme_settings_page_is_disabled(): void
     {
-        Livewire::actingAs($this->admin)
-            ->test(ThemeSettings::class)
-            ->set('data.color.primary', 'not-a-color')
-            ->call('save')
-            ->assertHasErrors(['data.color.primary']);
-
-        $service = app(ThemeSettingsService::class);
-        $this->assertSame('#be123c', $service->get('color.primary'));
-    }
-
-    public function test_saving_clears_the_theme_cache(): void
-    {
-        app(ThemeSettingsService::class)->all();
-        $this->assertTrue(Cache::has('site:theme:active'));
-
-        Livewire::actingAs($this->admin)
-            ->test(ThemeSettings::class)
-            ->set('data.color.primary', '#222222')
-            ->call('save')
-            ->assertHasNoFormErrors();
-
-        $this->assertSame('#222222', app(ThemeSettingsService::class)->get('color.primary'));
+        $this->assertFalse(\App\Filament\Pages\ThemeSettings::canAccess());
     }
 }

@@ -84,7 +84,7 @@ class BroadcastScheduleResolver
     {
         $dateString = $date->toDateString();
 
-        // Specific range match
+        // 1. Specific range match for the given date
         $template = ScheduleTemplate::query()
             ->where('status', 'published')
             ->where('is_active', true)
@@ -95,14 +95,29 @@ class BroadcastScheduleResolver
                 $q->whereNull('valid_until')->orWhere('valid_until', '>=', $dateString);
             })
             ->orderBy('priority', 'desc')
+            ->orderBy('id', 'desc')
             ->first();
 
         if (! $template) {
-            // Fallback to highest priority published template
+            // 2. Fallback to active template whose valid_from date has arrived
+            $template = ScheduleTemplate::query()
+                ->where('status', 'published')
+                ->where('is_active', true)
+                ->where(function ($q) use ($dateString) {
+                    $q->whereNull('valid_from')->orWhere('valid_from', '<=', $dateString);
+                })
+                ->orderBy('priority', 'desc')
+                ->orderBy('id', 'desc')
+                ->first();
+        }
+
+        if (! $template) {
+            // 3. Final fallback to any published active template
             $template = ScheduleTemplate::query()
                 ->where('status', 'published')
                 ->where('is_active', true)
                 ->orderBy('priority', 'desc')
+                ->orderBy('id', 'desc')
                 ->first();
         }
 

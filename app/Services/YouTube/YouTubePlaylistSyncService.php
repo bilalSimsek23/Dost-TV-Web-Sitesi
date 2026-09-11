@@ -226,6 +226,15 @@ class YouTubePlaylistSyncService
                                         if ($canonicalUrl !== $existingEp->youtube_url) {
                                             $updates['youtube_url'] = $canonicalUrl;
                                         }
+                                        if (array_key_exists('view_count', $item) && $item['view_count'] !== $existingEp->view_count) {
+                                            $updates['view_count'] = $item['view_count'];
+                                        }
+                                        if (array_key_exists('like_count', $item) && $item['like_count'] !== $existingEp->like_count) {
+                                            $updates['like_count'] = $item['like_count'];
+                                        }
+                                        if (array_key_exists('comment_count', $item) && $item['comment_count'] !== $existingEp->comment_count) {
+                                            $updates['comment_count'] = $item['comment_count'];
+                                        }
 
                                         if (! empty($updates)) {
                                             $existingEp->update($updates);
@@ -265,6 +274,9 @@ class YouTubePlaylistSyncService
                             'horizontal_image' => $item['thumbnail_url'] ?? null,
                             'aired_at' => ! empty($item['published_at']) ? date('Y-m-d H:i:s', strtotime($item['published_at'])) : now(),
                             'episode_number' => $maxEpisodeNum,
+                            'view_count' => $item['view_count'] ?? null,
+                            'like_count' => $item['like_count'] ?? null,
+                            'comment_count' => $item['comment_count'] ?? null,
                             'status' => 'published',
                             'show_on_public' => true,
                             'is_active' => true,
@@ -613,6 +625,15 @@ class YouTubePlaylistSyncService
                                         if ($canonicalUrl !== $existingEp->youtube_url) {
                                             $updates['youtube_url'] = $canonicalUrl;
                                         }
+                                        if (array_key_exists('view_count', $item) && $item['view_count'] !== $existingEp->view_count) {
+                                            $updates['view_count'] = $item['view_count'];
+                                        }
+                                        if (array_key_exists('like_count', $item) && $item['like_count'] !== $existingEp->like_count) {
+                                            $updates['like_count'] = $item['like_count'];
+                                        }
+                                        if (array_key_exists('comment_count', $item) && $item['comment_count'] !== $existingEp->comment_count) {
+                                            $updates['comment_count'] = $item['comment_count'];
+                                        }
 
                                         if (! empty($updates)) {
                                             $existingEp->update($updates);
@@ -651,6 +672,9 @@ class YouTubePlaylistSyncService
                             'horizontal_image' => $item['thumbnail_url'] ?? null,
                             'aired_at' => ! empty($item['published_at']) ? date('Y-m-d H:i:s', strtotime($item['published_at'])) : now(),
                             'episode_number' => $maxEpisodeNum,
+                            'view_count' => $item['view_count'] ?? null,
+                            'like_count' => $item['like_count'] ?? null,
+                            'comment_count' => $item['comment_count'] ?? null,
                             'status' => 'published',
                             'show_on_public' => true,
                             'is_active' => true,

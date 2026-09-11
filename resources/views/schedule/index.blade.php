@@ -121,7 +121,7 @@
             </div>
         </div>
 
-        <!-- Broadcast Stream List for Selected Day -->
+                    <!-- Broadcast Stream List for Selected Day -->
         <div class="mt-8">
             @foreach ($daysData as $day)
                 <div x-show="selectedDay === {{ $day['index'] }}"
@@ -129,15 +129,15 @@
                     x-transition:enter-start="opacity-0 translate-y-2"
                     x-transition:enter-end="opacity-100 translate-y-0"
                     style="display: none;"
-                    class="rounded-2xl border border-white/10 bg-white/[0.02] p-4 sm:p-6 backdrop-blur-xl shadow-2xl">
+                    class="rounded-2xl border border-white/10 bg-white/[0.02] p-3 sm:p-6 backdrop-blur-xl shadow-2xl">
 
                     <!-- Day Title Bar -->
-                    <div class="flex items-center justify-between border-b border-white/10 pb-4 mb-4">
-                        <div class="flex items-center gap-2.5">
-                            <span class="inline-block w-2.5 h-2.5 rounded-full {{ $day['is_today'] ? 'bg-rose-500 animate-pulse' : 'bg-slate-400' }}"></span>
-                            <h2 class="text-lg sm:text-xl font-bold text-white flex items-center gap-2">
+                    <div class="flex items-center justify-between border-b border-white/10 pb-2.5 mb-2.5 sm:pb-4 sm:mb-4">
+                        <div class="flex items-center gap-2">
+                            <span class="inline-block w-2 h-2 sm:w-2.5 sm:h-2.5 rounded-full {{ $day['is_today'] ? 'bg-rose-500 animate-pulse' : 'bg-slate-400' }}"></span>
+                            <h2 class="text-base sm:text-xl font-bold text-white flex items-center gap-1.5">
                                 {{ $day['day_name'] }}
-                                <span class="text-sm font-normal text-slate-400">· {{ $day['date_label'] }}</span>
+                                <span class="text-xs sm:text-sm font-normal text-slate-400">· {{ $day['date_label'] }}</span>
                             </h2>
                         </div>
                         <span class="text-xs sm:text-sm font-medium text-slate-400">
@@ -158,68 +158,121 @@
                                     $isNextUpcoming = $day['is_today'] && ($day['now_playing_index'] === null) && ($day['next_upcoming_index'] === $bIndex);
                                     $startTimeFormatted = \Illuminate\Support\Carbon::parse($item->start_time)->format('H:i');
                                     $endTimeFormatted = $item->end_time ? \Illuminate\Support\Carbon::parse($item->end_time)->format('H:i') : null;
+
+                                    $targetUrl = null;
+                                    if ($isNowPlaying && $item->is_live) {
+                                        $targetUrl = route('live.tv');
+                                    } elseif ($item->program) {
+                                        $targetUrl = route('programs.show', $item->program);
+                                    }
+
+                                    $imgSrc = null;
+                                    if ($item->program?->default_episode_image) {
+                                        $rawImg = $item->program->default_episode_image;
+                                        if (str_starts_with($rawImg, 'http://') || str_starts_with($rawImg, 'https://')) {
+                                            $imgSrc = $rawImg;
+                                        } else {
+                                            $imgSrc = asset('storage/' . $rawImg);
+                                        }
+                                    }
                                 @endphp
 
                                 <div @if($isNowPlaying) id="now-playing" data-now-playing="true" @elseif($isNextUpcoming) data-next-upcoming="true" @endif
-                                    class="group flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-6 py-3.5 px-3 sm:px-4 rounded-xl transition-all duration-200 scroll-mt-28
+                                    class="group flex flex-row items-center gap-2.5 sm:gap-5 py-2.5 sm:py-3.5 px-2 sm:px-4 rounded-xl transition-all duration-200 scroll-mt-28
                                            {{ $isNowPlaying
-                                                ? 'bg-rose-500/[0.12] border border-rose-500/40 shadow-[0_0_25px_rgba(244,63,94,0.18)] ring-1 ring-rose-500/30 my-2'
+                                                ? 'bg-rose-500/[0.12] border border-rose-500/40 shadow-[0_0_25px_rgba(244,63,94,0.18)] ring-1 ring-rose-500/30 my-1.5'
                                                 : 'hover:bg-white/[0.04] border border-transparent' }}">
 
-                                    <!-- Time Column (Left): Natural on mobile, fixed width on desktop -->
-                                    <div class="w-auto sm:w-28 sm:min-w-[7rem] flex-shrink-0 sm:border-r sm:border-white/10 sm:pr-4">
-                                        <div class="flex items-baseline gap-1 font-mono tracking-tight {{ $isNowPlaying ? 'text-rose-400 font-extrabold text-base sm:text-lg' : 'text-slate-300 font-bold text-sm sm:text-base' }}">
-                                            <span>{{ $startTimeFormatted }}</span>
+                                    <!-- Time Column (Left): Compact 72px on mobile, expanded on desktop -->
+                                    <div class="w-[72px] sm:w-36 md:w-40 lg:w-44 flex-shrink-0 sm:border-r sm:border-white/10 sm:pr-5 flex flex-col justify-center">
+                                        <div class="flex flex-col items-start justify-center gap-0.5">
+                                            <span class="text-lg sm:text-3xl lg:text-[38px] font-bold tracking-tight leading-none {{ $isNowPlaying ? 'text-rose-400' : 'text-white' }}">
+                                                {{ $startTimeFormatted }}
+                                            </span>
                                             @if ($endTimeFormatted)
-                                                <span class="text-xs text-slate-500 font-normal">- {{ $endTimeFormatted }}</span>
+                                                <span class="text-[10px] sm:text-sm font-normal text-slate-400/60 tracking-normal leading-none sm:leading-normal">
+                                                    {{ $endTimeFormatted }}
+                                                </span>
                                             @endif
                                         </div>
                                     </div>
 
+                                    <!-- 16:9 Thumbnail Column (Middle): 96px on mobile, 176/192px on desktop -->
+                                    <div class="w-24 sm:w-44 md:w-48 flex-shrink-0">
+                                        @if ($targetUrl)
+                                            <a href="{{ $targetUrl }}" class="group/thumb block relative aspect-video w-full overflow-hidden rounded-lg sm:rounded-xl bg-slate-900 ring-1 ring-white/10 group-hover:ring-rose-500/50 transition">
+                                        @else
+                                            <div class="relative aspect-video w-full overflow-hidden rounded-lg sm:rounded-xl bg-slate-900 ring-1 ring-white/10">
+                                        @endif
+
+                                            @if ($imgSrc)
+                                                <img src="{{ $imgSrc }}" alt="{{ $item->display_title ?? $item->program?->name }}" loading="lazy" class="h-full w-full object-cover transition duration-300 group-hover/thumb:scale-105">
+                                            @else
+                                                <div class="flex h-full w-full items-center justify-center bg-slate-900/90 text-slate-700">
+                                                    <svg class="h-5 w-5 sm:h-7 sm:w-7 text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                    </svg>
+                                                </div>
+                                            @endif
+
+                                        @if ($targetUrl)
+                                            </a>
+                                        @else
+                                            </div>
+                                        @endif
+                                    </div>
+
                                     <!-- Program Info Column (Right): flex-1 min-w-0 -->
-                                    <div class="flex-1 min-w-0 flex flex-col sm:flex-row sm:items-center justify-between gap-2 w-full">
-                                        <div class="min-w-0 flex flex-col gap-0.5">
-                                            <div class="min-w-0 flex items-center flex-wrap gap-2">
+                                    <div class="flex-1 min-w-0 flex flex-col justify-center gap-0.5">
+                                        @if ($isNowPlaying || $item->is_live || $item->is_repeat)
+                                            <div class="min-w-0 flex items-center flex-wrap gap-1 mb-0.5">
                                                 @if ($isNowPlaying)
-                                                    <span class="flex-shrink-0 inline-flex items-center gap-1 rounded-full bg-rose-500 px-2.5 py-0.5 text-xs font-black uppercase tracking-wider text-white shadow-[0_0_10px_rgba(244,63,94,0.6)]">
-                                                        <span class="h-1.5 w-1.5 rounded-full bg-white animate-pulse"></span>
+                                                    <span class="flex-shrink-0 inline-flex items-center gap-1 rounded-full bg-rose-500 px-2 py-0.5 text-[9px] sm:text-xs font-black uppercase tracking-wider text-white shadow">
+                                                        <span class="h-1 w-1 rounded-full bg-white animate-pulse"></span>
                                                         ŞİMDİ
                                                     </span>
                                                 @endif
 
-                                                @if ($item->program)
-                                                    <a href="{{ route('programs.show', $item->program) }}"
-                                                        class="text-base font-bold tracking-tight text-white hover:text-rose-400 transition-colors {{ $isNowPlaying ? 'text-rose-100' : '' }}">
-                                                        {{ $item->display_title ?? $item->program->name }}
-                                                    </a>
-                                                @else
-                                                    <span class="text-base font-bold tracking-tight text-white {{ $isNowPlaying ? 'text-rose-100' : '' }}">
-                                                        {{ $item->display_title ?? 'Özel Yayın' }}
-                                                    </span>
-                                                @endif
-
                                                 @if ($item->is_live)
-                                                    <span class="flex-shrink-0 rounded bg-red-600 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white">
+                                                    <span class="flex-shrink-0 rounded bg-red-600 px-1.5 py-0.5 text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-white">
                                                         CANLI
                                                     </span>
                                                 @endif
 
                                                 @if ($item->is_repeat)
-                                                    <span class="flex-shrink-0 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 px-2 py-0.5 text-[10px] font-medium">
+                                                    <span class="flex-shrink-0 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 px-1.5 py-0.5 text-[9px] sm:text-[10px] font-medium">
                                                         TEKRAR
                                                     </span>
                                                 @endif
                                             </div>
+                                        @endif
 
-                                            @if (!empty($item->program?->short_description))
-                                                <p class="text-xs text-slate-400 leading-relaxed line-clamp-2 {{ $isNowPlaying ? 'text-rose-200/80' : '' }}">
-                                                    {{ $item->program->short_description }}
-                                                </p>
+                                        @php
+                                            $showProgramNames = (bool) ($activeTemplate->show_program_names ?? true);
+                                        @endphp
+
+                                        @if ($showProgramNames)
+                                            @if ($item->program)
+                                                <a href="{{ route('programs.show', $item->program) }}"
+                                                    class="text-sm sm:text-base lg:text-lg font-bold tracking-tight text-white hover:text-rose-400 transition-colors line-clamp-2 {{ $isNowPlaying ? 'text-rose-100' : '' }}">
+                                                    {{ $item->display_title ?? $item->program->name }}
+                                                </a>
+                                            @else
+                                                <span class="text-sm sm:text-base lg:text-lg font-bold tracking-tight text-white line-clamp-2 {{ $isNowPlaying ? 'text-rose-100' : '' }}">
+                                                    {{ $item->display_title ?? 'Özel Yayın' }}
+                                                </span>
                                             @endif
-                                        </div>
+                                        @endif
+
+                                        @if (!empty($item->program?->short_description))
+                                            <p class="text-xs text-slate-400 leading-relaxed line-clamp-2 {{ $isNowPlaying ? 'text-rose-200/80' : '' }}">
+                                                {{ $item->program->short_description }}
+                                            </p>
+                                        @endif
 
                                         @if (!empty($item->note))
-                                            <span class="flex-shrink-0 text-xs text-slate-400 italic">
+                                            <span class="text-[10px] sm:text-xs text-slate-400 italic">
                                                 {{ $item->note }}
                                             </span>
                                         @endif

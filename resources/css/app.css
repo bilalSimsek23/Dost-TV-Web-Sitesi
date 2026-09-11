@@ -1,12 +1,84 @@
 @import 'tailwindcss';
+@import './custom.css';
 @plugin '@tailwindcss/typography';
 
 @source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
 @source '../../storage/framework/views/*.php';
+@source '../views/**/*.blade.php';
+@source '../views/components/**/*.blade.php';
+@source '../views/components/site/*.blade.php';
+@source '../../resources/views/**/*.blade.php';
 @source '../**/*.blade.php';
 @source '../**/*.js';
 
 @theme {
     --font-sans: 'Instrument Sans', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
         'Segoe UI Symbol', 'Noto Color Emoji';
+    --color-slate-950: var(--color-bg, #030712);
+    --color-slate-900: var(--color-surface, #0f172a);
+    --color-slate-800: var(--color-surface-2, #1e293b);
 }
+
+.carousel-scrollbar-hidden {
+    scrollbar-width: none !important;
+    -ms-overflow-style: none !important;
+}
+.carousel-scrollbar-hidden::-webkit-scrollbar {
+    display: none !important;
+    width: 0 !important;
+    height: 0 !important;
+}
+
+html,
+body {
+    background-color: var(--color-bg, #030712);
+    color: var(--color-text, #f8fafc);
+    transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+.theme-bg-main,
+.bg-theme-main {
+    background-color: var(--color-bg, #030712) !important;
+}
+
+.theme-bg-surface,
+.bg-theme-surface {
+    background-color: var(--color-surface, #0f172a) !important;
+}
+
+.theme-bg-surface-2,
+.bg-theme-surface-2 {
+    background-color: var(--color-surface-2, #1e293b) !important;
+}
+
+.theme-bg-accent,
+.bg-theme-accent {
+    background-color: var(--color-accent, #f43f5e) !important;
+}
+
+.theme-text-main,
+.text-theme-main {
+    color: var(--color-text, #f8fafc) !important;
+}
+
+.theme-text-accent,
+.text-theme-accent {
+    color: var(--color-accent, #f43f5e) !important;
+}
+
+.theme-text-muted,
+.text-theme-muted {
+    color: var(--color-text-muted, #94a3b8) !important;
+}
+
+.theme-border,
+.border-theme {
+    border-color: var(--color-border, rgba(255, 255, 255, 0.1)) !important;
+}
+
+@media (min-width: 1024px) {
+    .lg\:object-\[center_30\%\] {
+        object-position: center 30% !important;
+    }
+}
+

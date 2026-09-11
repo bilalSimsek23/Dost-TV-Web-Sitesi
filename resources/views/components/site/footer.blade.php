@@ -1,8 +1,10 @@
 @props([
     'preview' => false,
     'siteSettings' => null,
+    'fixedSettings' => null,
     'footerLogo' => null,
     'footerDescription' => null,
+    'recommendedSites' => null,
     'phone' => null,
     'email' => null,
     'facebookUrl' => null,
@@ -27,6 +29,14 @@
     $whatsappUrl = $whatsappUrl ?? $siteSettings->whatsapp_url;
     $telegramUrl = $telegramUrl ?? $siteSettings->telegram_url;
 
+    $recommendedSites = $recommendedSites ?? ($siteSettings->recommended_sites ?? []);
+    $activeRecommendedSites = collect($recommendedSites)->filter(function ($item) {
+        if (! is_array($item)) {
+            return false;
+        }
+        return ! isset($item['is_active']) || $item['is_active'] === true || $item['is_active'] === '1' || $item['is_active'] === 1;
+    })->values();
+
     $copyrightText = $copyrightText ?? ($siteSettings->copyright_text ?: '© {year} Dost TV. Tüm hakları saklıdır.');
     $copyrightText = str_replace('{year}', now()->year, $copyrightText);
 
@@ -37,9 +47,20 @@
         ->orderBy('sort_order')
         ->orderBy('title')
         ->get();
+
+    if ($fixedSettings === null) {
+        $activeLayout = \App\Models\HomepageLayout::query()->where('is_active', true)->first();
+        $publishedSections = $activeLayout?->published_sections ?? [];
+        $fixedSettings = $publishedSections['_fixed_settings'] ?? [];
+    }
+
+    $footerConfig = $fixedSettings['footer'] ?? [];
+    $paddingTop = (int) ($footerConfig['section_padding_top'] ?? 48);
+    $paddingBottom = (int) ($footerConfig['section_padding_bottom'] ?? 56);
+    $paddingX = (int) ($footerConfig['section_padding_x'] ?? 32);
 @endphp
 
-<footer class="{{ $preview ? 'mt-0' : 'mt-12 sm:mt-16' }} border-t border-white/5 bg-slate-950/60 text-slate-300">
+<footer class="mt-0 text-slate-300 overflow-hidden" style="background-color: var(--color-bg); padding-top: {{ $paddingTop }}px; padding-bottom: {{ $paddingBottom }}px; padding-left: {{ $paddingX }}px; padding-right: {{ $paddingX }}px;">
     <style>
         .dost-footer-grid {
             display: grid;
@@ -49,14 +70,14 @@
         }
         @media (min-width: 640px) and (max-width: 767px) {
             .dost-footer-grid {
-                grid-template-columns: repeat(2, minmax(0, 1fr));
+                grid-template-columns: repeat({{ $activeRecommendedSites->isNotEmpty() ? 2 : 2 }}, minmax(0, 1fr));
             }
         }
         @media (min-width: 768px) {
             .dost-footer-grid {
                 display: grid !important;
-                grid-template-columns: 5fr 3fr 4fr !important;
-                gap: 2rem !important;
+                grid-template-columns: {{ $activeRecommendedSites->isNotEmpty() ? '4fr 4fr 4fr' : '7fr 5fr' }} !important;
+                gap: 2.5rem !important;
                 align-items: start !important;
             }
         }
@@ -64,12 +85,11 @@
 
     <div class="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8 space-y-8">
 
-        {{-- 3 Main Columns Guaranteed Grid Layout: 1. Kurumsal (5fr), 2. İletişim (3fr), 3. Sosyal Medya (4fr) --}}
         <div class="dost-footer-grid pb-4">
             
-            {{-- Column 1: Kurumsal (5/12 Ratio - En Geniş) --}}
+            {{-- Column 1: Kurumsal --}}
             <div class="space-y-3">
-                <h4 class="text-sm font-bold uppercase tracking-wider text-white border-b border-white/10 pb-2">Kurumsal</h4>
+                <h4 class="text-sm font-bold uppercase tracking-wider text-white mb-2">Kurumsal</h4>
                 @if($corporatePages->isNotEmpty())
                     <ul class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
                         @foreach($corporatePages as $page)
@@ -86,37 +106,60 @@
                 @endif
             </div>
 
-            {{-- Column 2: İletişim (3/12 Ratio - Ortada) --}}
-            <div class="space-y-3">
-                <h4 class="text-sm font-bold uppercase tracking-wider text-white border-b border-white/10 pb-2">İletişim</h4>
-                <div class="space-y-2.5 text-xs text-slate-400">
-                    @if(!empty($phone))
-                        <div class="flex items-center gap-2">
-                            <span class="text-slate-500 font-medium shrink-0">Telefon:</span>
-                            <a href="{{ $preview ? 'javascript:void(0)' : 'tel:' . preg_replace('/[^0-9+]/', '', $phone) }}" class="text-slate-200 hover:text-white transition font-medium truncate">
-                                {{ $phone }}
-                            </a>
-                        </div>
-                    @endif
+            {{-- Column 2: Önerilen Siteler (Rendered only if active sites exist) --}}
+            @if($activeRecommendedSites->isNotEmpty())
+                <div class="space-y-3">
+                    <h4 class="text-sm font-bold uppercase tracking-wider text-white mb-2">Önerilen Siteler</h4>
+                    <div class="grid grid-cols-1 gap-2">
+                        @foreach($activeRecommendedSites as $site)
+                            @php
+                                $siteName = is_string($site['name'] ?? null) ? $site['name'] : 'Site';
+                                $siteUrl = is_string($site['url'] ?? null) ? $site['url'] : '#';
+                                $siteLogo = $site['logo'] ?? null;
+                                if (is_array($siteLogo)) {
+                                    $siteLogo = reset($siteLogo) ?: null;
+                                }
 
-                    @if(!empty($email))
-                        <div class="flex items-center gap-2">
-                            <span class="text-slate-500 font-medium shrink-0">E-posta:</span>
-                            <a href="{{ $preview ? 'javascript:void(0)' : 'mailto:' . $email }}" class="text-slate-200 hover:text-white transition font-medium truncate">
-                                {{ $email }}
-                            </a>
-                        </div>
-                    @endif
+                                $targetBlank = ! empty($site['target_blank']);
 
-                    @if(empty($phone) && empty($email))
-                        <p class="text-xs text-slate-500">İletişim bilgisi eklenmedi.</p>
-                    @endif
+                                $logoUrl = null;
+                                if (is_string($siteLogo) && filled(trim($siteLogo))) {
+                                    $siteLogo = trim($siteLogo);
+                                    if (str_starts_with($siteLogo, 'http://') || str_starts_with($siteLogo, 'https://')) {
+                                        $logoUrl = $siteLogo;
+                                    } else {
+                                        $cleanPath = ltrim(preg_replace('/^\/?storage\//', '', $siteLogo), '/');
+                                        if (\Illuminate\Support\Facades\Storage::disk('public')->exists($cleanPath) || file_exists(public_path('storage/' . $cleanPath))) {
+                                            $logoUrl = asset('storage/' . $cleanPath);
+                                        }
+                                    }
+                                }
+                            @endphp
+                            <a href="{{ $preview ? 'javascript:void(0)' : $siteUrl }}"
+                               target="{{ $preview ? '_self' : ($targetBlank ? '_blank' : '_self') }}"
+                               @if($targetBlank && ! $preview) rel="noopener noreferrer" @endif
+                               class="group flex items-center gap-3 p-1.5 pr-3 rounded-xl bg-slate-900/40 border border-white/[0.06] hover:bg-slate-900/90 hover:border-rose-500/30 transition-all duration-200">
+                                
+                                @if($logoUrl)
+                                    <img src="{{ $logoUrl }}" alt="{{ $siteName }}" loading="lazy" class="w-10 h-10 rounded-full object-cover shrink-0 ring-1 ring-white/10 group-hover:ring-rose-500/50 transition">
+                                @else
+                                    <div class="w-10 h-10 rounded-full bg-gradient-to-br from-slate-800 to-slate-900 text-rose-400 font-bold text-sm flex items-center justify-center shrink-0 ring-1 ring-white/10 group-hover:ring-rose-500/50 transition">
+                                        {{ mb_strtoupper(mb_substr($siteName, 0, 1)) }}
+                                    </div>
+                                @endif
+
+                                <span class="text-xs font-semibold text-slate-300 group-hover:text-white transition line-clamp-1">
+                                    {{ $siteName }}
+                                </span>
+                            </a>
+                        @endforeach
+                    </div>
                 </div>
-            </div>
+            @endif
 
-            {{-- Column 3: Sosyal Medya (4/12 Ratio - Sağa Taşmaz) --}}
+            {{-- Column 3: Sosyal Medya --}}
             <div class="space-y-3">
-                <h4 class="text-sm font-bold uppercase tracking-wider text-white border-b border-white/10 pb-2">Sosyal Medya</h4>
+                <h4 class="text-sm font-bold uppercase tracking-wider text-white mb-2">Sosyal Medya</h4>
                 @if($instagramUrl || $facebookUrl || $youtubeUrl || $xUrl || $whatsappUrl || $telegramUrl)
                     <div class="flex flex-wrap gap-2">
                         @if($instagramUrl)
@@ -169,7 +212,7 @@
         </div>
 
         {{-- Single Bottom Copyright Bar --}}
-        <div class="border-t border-white/5 pt-6 text-center text-xs text-slate-400">
+        <div class="pt-4 text-center text-xs text-slate-400">
             <p>{{ $copyrightText }}</p>
         </div>
 

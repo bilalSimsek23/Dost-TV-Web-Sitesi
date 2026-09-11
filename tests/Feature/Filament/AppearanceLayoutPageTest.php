@@ -85,4 +85,12 @@ class AppearanceLayoutPageTest extends TestCase
 
         $this->assertNotEquals('<script>alert("xss")</script>', SiteSetting::current()->custom_css);
     }
+
+    public function test_appearance_layout_view_has_exactly_one_form_tag(): void
+    {
+        $content = file_get_contents(resource_path('views/filament/pages/site-layout/appearance-layout.blade.php'));
+
+        $formCount = substr_count($content, '<form');
+        $this->assertEquals(1, $formCount, 'appearance-layout.blade.php MUST contain exactly 1 form tag.');
+    }
 }

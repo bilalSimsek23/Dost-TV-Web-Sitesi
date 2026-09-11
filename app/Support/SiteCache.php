@@ -25,6 +25,10 @@ class SiteCache
 
     private const HOME_FEATURED_PROGRAMS_KEY = 'site:homepage:featured_programs';
 
+    private const HOME_HERO_PROGRAMS_KEY = 'site:homepage:hero_programs';
+
+    private const PROGRAM_DETAIL_LAYOUT_KEY = 'site:program_detail:layout';
+
     private const TTL_SECONDS = 86400;
 
     public static function getHomepageTtl(): int
@@ -78,6 +82,7 @@ class SiteCache
         Cache::forget(self::HOMEPAGE_SECTIONS_KEY);
         Cache::forget(self::HOME_BANNERS_KEY);
         Cache::forget(self::HOME_FEATURED_PROGRAMS_KEY);
+        Cache::forget(self::HOME_HERO_PROGRAMS_KEY);
     }
 
     public static function rememberHomeBanners(Closure $callback): mixed
@@ -100,6 +105,19 @@ class SiteCache
         Cache::forget(self::HOME_FEATURED_PROGRAMS_KEY);
     }
 
+    public static function rememberHomeHeroPrograms(Closure $callback): mixed
+    {
+        $dateKey = now()->format('Y-m-d');
+        return Cache::remember(self::HOME_HERO_PROGRAMS_KEY.':'.$dateKey, self::getHomepageTtl(), $callback);
+    }
+
+    public static function forgetHomeHeroPrograms(): void
+    {
+        $dateKey = now()->format('Y-m-d');
+        Cache::forget(self::HOME_HERO_PROGRAMS_KEY.':'.$dateKey);
+        Cache::forget(self::HOME_HERO_PROGRAMS_KEY);
+    }
+
     public static function rememberCategoryTree(Closure $callback): mixed
     {
         return Cache::remember(self::CATEGORY_TREE_KEY, self::TTL_SECONDS, $callback);
@@ -108,5 +126,15 @@ class SiteCache
     public static function forgetCategoryTree(): void
     {
         Cache::forget(self::CATEGORY_TREE_KEY);
+    }
+
+    public static function rememberProgramDetailLayout(Closure $callback): mixed
+    {
+        return Cache::remember(self::PROGRAM_DETAIL_LAYOUT_KEY, self::getHomepageTtl(), $callback);
+    }
+
+    public static function forgetProgramDetailLayout(): void
+    {
+        Cache::forget(self::PROGRAM_DETAIL_LAYOUT_KEY);
     }
 }

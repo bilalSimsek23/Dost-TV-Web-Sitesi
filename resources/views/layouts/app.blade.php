@@ -1,5 +1,43 @@
 @php
     $siteSettings = $siteSettings ?? \App\Models\SiteSetting::current();
+
+    // Theme Preview Token & Session Resolution
+    $previewToken = request('theme_preview_token') ?? session('theme_preview_token');
+    $previewData = null;
+
+    if ($previewToken) {
+        $previewData = \Illuminate\Support\Facades\Cache::get('theme_preview_' . $previewToken) ?? session('theme_preview_data');
+    } else {
+        $previewData = session('theme_preview_data');
+    }
+
+    $isPreviewActive = false;
+    $previewThemeSettings = null;
+
+    if ($previewData && is_array($previewData)) {
+        if (auth()->check() && auth()->user()?->hasAnyRole(['super_admin', 'administrator', 'designer', 'editor'])) {
+            $isPreviewActive = true;
+            $previewThemeSettings = $previewData['theme_settings'] ?? null;
+
+            if ($previewToken && ! session()->has('theme_preview_token')) {
+                session()->put('theme_preview_token', $previewToken);
+                session()->put('theme_preview_data', $previewData);
+            }
+        }
+    }
+
+    if ($isPreviewActive && session()->has('theme_preview_mode')) {
+        $overrideMode = session('theme_preview_mode');
+        if (is_array($previewThemeSettings)) {
+            $previewThemeSettings['mode'] = $overrideMode;
+        } else {
+            $previewThemeSettings = array_merge($siteSettings->normalized_theme_settings, ['mode' => $overrideMode]);
+        }
+    }
+
+    $activeThemeSettings = $previewThemeSettings ?? $siteSettings->normalized_theme_settings;
+    $activeThemeMode = $activeThemeSettings['mode'] ?? 'dark';
+
     $rawTitle = trim(View::yieldContent('title'));
     $titleSuffix = $siteSettings->title_suffix ?? '| DOST TV';
 
@@ -36,7 +74,7 @@
     $robotsDirective = $isIndexingAllowed ? 'index, follow' : 'noindex, nofollow';
 @endphp
 <!DOCTYPE html>
-<html lang="tr">
+<html lang="tr" data-theme="{{ $activeThemeMode }}" class="{{ $activeThemeMode }}">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -44,6 +82,10 @@
     <meta name="description" content="{{ $metaDescription }}">
     <meta name="robots" content="{{ $robotsDirective }}">
     <link rel="canonical" href="{{ url()->current() }}">
+
+    <style id="dost-theme-tokens">
+        {!! $siteSettings->renderThemeCss($previewThemeSettings) !!}
+    </style>
 
     {{-- OpenGraph Meta Tags --}}
     <meta property="og:title" content="{{ $pageTitle }}">
@@ -97,9 +139,12 @@
         {!! $siteSettings->custom_head_code !!}
     @endif
 
-    @vite(['resources/css/app.css', 'resources/js/app.js'])
+    @vite(['resources/css/app.css', 'resources/css/custom.css', 'resources/js/app.js'])
 </head>
-<body class="min-h-screen bg-slate-950 text-slate-100 antialiased">
+<body class="min-h-screen theme-bg-main theme-text-main antialiased">
+    @if($isPreviewActive)
+        <x-site.theme-preview-bar :active-mode="$activeThemeMode" />
+    @endif
     {{-- Google Tag Manager (noscript) --}}
     @if(!empty($siteSettings->google_tag_manager_id))
         <!-- Google Tag Manager (noscript) -->
@@ -108,11 +153,13 @@
         <!-- End Google Tag Manager (noscript) -->
     @endif
 
-    <div class="pointer-events-none fixed inset-0 -z-10 bg-[radial-gradient(ellipse_80%_50%_at_50%_-20%,rgba(244,63,94,0.18),rgba(2,6,23,0))]"></div>
+    <div class="pointer-events-none fixed inset-0 -z-10 theme-bg-main overflow-hidden">
+        <div class="absolute inset-0 bg-[radial-gradient(ellipse_80%_60%_at_50%_-10%,var(--color-accent),transparent)] opacity-10"></div>
+    </div>
 
     <x-site.header />
 
-    <main>
+    <main class="w-full max-w-full overflow-x-hidden">
         @yield('content')
     </main>
 

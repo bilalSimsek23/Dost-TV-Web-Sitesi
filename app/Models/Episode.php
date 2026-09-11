@@ -6,6 +6,7 @@ use App\Support\Youtube;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 
 class Episode extends Model
 {
@@ -31,6 +32,9 @@ class Episode extends Model
         'is_active',
         'show_on_public',
         'duration',
+        'view_count',
+        'like_count',
+        'comment_count',
         'aired_at',
         'sort_order',
         'meta_title',
@@ -52,6 +56,9 @@ class Episode extends Model
         'season_number' => 'integer',
         'season_year' => 'string',
         'program_series_id' => 'integer',
+        'view_count' => 'integer',
+        'like_count' => 'integer',
+        'comment_count' => 'integer',
     ];
 
 
@@ -111,6 +118,13 @@ class Episode extends Model
         return $this->belongsTo(ProgramSeries::class, 'program_series_id');
     }
 
+    public function videoCollections(): BelongsToMany
+    {
+        return $this->belongsToMany(VideoCollection::class, 'episode_video_collection')
+            ->withPivot('id', 'sort_order')
+            ->withTimestamps();
+    }
+
     public function getYoutubeEmbedUrlAttribute(): ?string
     {
         return Youtube::embedUrl($this->youtube_url);
@@ -131,5 +145,35 @@ class Episode extends Model
         }
 
         return null;
+    }
+
+    public function getPublicUrlAttribute(): string
+    {
+        $programSlug = $this->program?->slug;
+
+        if (! $programSlug && $this->program_id) {
+            $programSlug = Program::where('id', $this->program_id)->value('slug');
+        }
+
+        $programSlug = $programSlug ?? 'program';
+
+        $params = [
+            'program' => $programSlug,
+            'episode' => $this->id,
+        ];
+
+        if (filled($this->season_year)) {
+            $params['year'] = $this->season_year;
+        }
+
+        if (filled($this->season_number)) {
+            $params['season'] = $this->season_number;
+        }
+
+        if (filled($this->program_series_id)) {
+            $params['series'] = $this->program_series_id;
+        }
+
+        return route('programs.show', $params);
     }
 }

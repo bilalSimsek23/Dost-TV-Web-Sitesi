@@ -19,9 +19,11 @@ class Program extends Model
         'slug',
         'status',
         'short_description',
+        'hero_text',
         'description',
         'cover_image',
         'horizontal_image',
+        'mobile_hero_image',
         'program_logo',
         'default_episode_image',
         'trailer_url',
@@ -30,6 +32,8 @@ class Program extends Model
         'last_youtube_sync_at',
         'is_active',
         'is_featured',
+        'hero_days',
+        'hero_focus_settings',
         'show_on_public',
         'sort_order',
         'meta_title',
@@ -39,9 +43,33 @@ class Program extends Model
     protected $casts = [
         'is_active' => 'boolean',
         'is_featured' => 'boolean',
+        'hero_days' => 'array',
+        'hero_focus_settings' => 'array',
         'show_on_public' => 'boolean',
         'last_youtube_sync_at' => 'datetime',
     ];
+
+    public function getHeroFocusCoords(string $device = 'desktop'): array
+    {
+        $settings = (array) ($this->hero_focus_settings ?? []);
+
+        $defaultX = 50;
+        $defaultY = 30;
+
+        $x = $settings["{$device}_x"] ?? $settings['desktop_x'] ?? $defaultX;
+        $y = $settings["{$device}_y"] ?? $settings['desktop_y'] ?? $defaultY;
+
+        return [
+            'x' => max(0, min(100, (int) $x)),
+            'y' => max(0, min(100, (int) $y)),
+        ];
+    }
+
+    public function getHeroFocusStyle(string $device = 'desktop'): string
+    {
+        $coords = $this->getHeroFocusCoords($device);
+        return "{$coords['x']}% {$coords['y']}%";
+    }
 
     public const STATUSES = [
         'active' => 'Aktif',
@@ -70,13 +98,19 @@ class Program extends Model
             $program->is_active = (bool) $program->show_on_public && in_array($program->status, ['active', 'season_break'], true);
         });
 
-        static::saved(function () {
+        static::saved(function (Program $program) {
             \App\Services\Menu\ProgramMegaMenuService::forgetCache();
             \App\Support\SiteCache::forgetHomeFeaturedPrograms();
+            \App\Support\SiteCache::forgetHomeHeroPrograms();
+
+            if (filled($program->youtube_channel_url)) {
+                app(\App\Services\YouTube\ProgramYoutubeChannelSyncService::class)->syncFromProgram($program);
+            }
         });
         static::deleted(function () {
             \App\Services\Menu\ProgramMegaMenuService::forgetCache();
             \App\Support\SiteCache::forgetHomeFeaturedPrograms();
+            \App\Support\SiteCache::forgetHomeHeroPrograms();
         });
     }
 
@@ -108,6 +142,13 @@ class Program extends Model
     public function categories(): BelongsToMany
     {
         return $this->belongsToMany(Category::class);
+    }
+
+    public function programCollections(): BelongsToMany
+    {
+        return $this->belongsToMany(ProgramCollection::class, 'program_collection_program')
+            ->withPivot('id', 'sort_order', 'is_pinned')
+            ->withTimestamps();
     }
 
     public function youtubeSyncLogs(): HasMany

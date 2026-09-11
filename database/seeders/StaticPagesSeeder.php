@@ -11,32 +11,12 @@ class StaticPagesSeeder extends Seeder
     {
         $pages = [
             [
-                'title' => 'Yayıncı Künye Bilgisi',
-                'slug' => 'yayinci-kunye-bilgisi',
-                'show_in_menu' => true,
-                'sort_order' => 1,
-                'content' => <<<'HTML'
-                    <h2>Şirket Bilgileri</h2>
-                    <ul>
-                        <li><strong>Kuruluş adı:</strong> Ankara İletişim Hizmetleri A.Ş.</li>
-                        <li><strong>Kanal adı:</strong> Dost TV</li>
-                        <li><strong>Yayın türü:</strong> Uydu, tematik</li>
-                        <li><strong>Lisans:</strong> U-TV</li>
-                        <li><strong>Merkez:</strong> İstanbul Caddesi Devrez Sok No 1, İskitler/Ankara</li>
-                        <li><strong>Web:</strong> dosttv.com</li>
-                        <li><strong>Telefon:</strong> +90 312 341 21 21</li>
-                    </ul>
-                    <h2>Sorumlu Müdür</h2>
-                    <p>Bekir Ceylan</p>
-                    <h2>İzleyici Temsilcisi</h2>
-                    <p>İlkay Bayer Şimşek</p>
-                    HTML,
-            ],
-            [
                 'title' => 'Dost TV Yayın İlkeleri',
                 'slug' => 'dost-tv-yayin-ilkeleri',
                 'show_in_menu' => true,
-                'sort_order' => 2,
+                'show_in_footer' => true,
+                'page_type' => 'corporate',
+                'sort_order' => 1,
                 'content' => <<<'HTML'
                     <p>Dost TV, geçici değil kalıcı değerleri yansıtmayı hedefleyen bir iletişim platformudur. Kuruluş, "biz dostuz" ilkesinden hareket ederek, adil ve merhametli yayıncılığı benimsemiştir.</p>
                     <h2>Yayın Felsefesi</h2>
@@ -55,9 +35,35 @@ class StaticPagesSeeder extends Seeder
                     HTML,
             ],
             [
+                'title' => 'Yayıncı Künye Bilgisi',
+                'slug' => 'yayinci-kunye-bilgisi',
+                'show_in_menu' => true,
+                'show_in_footer' => true,
+                'page_type' => 'corporate',
+                'sort_order' => 2,
+                'content' => <<<'HTML'
+                    <h2>Şirket Bilgileri</h2>
+                    <ul>
+                        <li><strong>Kuruluş adı:</strong> Ankara İletişim Hizmetleri A.Ş.</li>
+                        <li><strong>Kanal adı:</strong> Dost TV</li>
+                        <li><strong>Yayın türü:</strong> Uydu, tematik</li>
+                        <li><strong>Lisans:</strong> U-TV</li>
+                        <li><strong>Merkez:</strong> İstanbul Caddesi Devrez Sok No 1, İskitler/Ankara</li>
+                        <li><strong>Web:</strong> dosttv.com</li>
+                        <li><strong>Telefon:</strong> +90 312 341 21 21</li>
+                    </ul>
+                    <h2>Sorumlu Müdür</h2>
+                    <p>Bekir Ceylan</p>
+                    <h2>İzleyici Temsilcisi</h2>
+                    <p>İlkay Bayer Şimşek</p>
+                    HTML,
+            ],
+            [
                 'title' => 'Neden Dost TV',
                 'slug' => 'neden-dost-tv',
                 'show_in_menu' => true,
+                'show_in_footer' => true,
+                'page_type' => 'corporate',
                 'sort_order' => 3,
                 'content' => <<<'HTML'
                     <p>Dost TV, insanların büyük dünya olaylarından ziyade kişisel gelişime ve manevi bağlantıya odaklanmasını teşvik eder. Kanal, küçük ama bir insan için büyük adımlar atmaya çağırır — özellikle kişinin kendini ve yaratıcısını tanımasına yönelik.</p>
@@ -75,6 +81,8 @@ class StaticPagesSeeder extends Seeder
                 'title' => 'Dost Vakfı Hesap Numaraları',
                 'slug' => 'dost-vakfi-hesap-numaralari',
                 'show_in_menu' => true,
+                'show_in_footer' => true,
+                'page_type' => 'corporate',
                 'sort_order' => 4,
                 'content' => <<<'HTML'
                     <p>Dost Vakfı'na bağışlarınız için kullanabileceğiniz banka hesap bilgileri aşağıdadır.</p>
@@ -85,10 +93,24 @@ class StaticPagesSeeder extends Seeder
                     HTML,
             ],
             [
+                'title' => 'Kişisel Verilerin Korunması ve Gizlilik Politikası',
+                'slug' => 'kisisel-verilerin-korunmasi-ve-gizlilik-politikasi',
+                'show_in_menu' => true,
+                'show_in_footer' => true,
+                'page_type' => 'corporate',
+                'sort_order' => 5,
+                'content' => <<<'HTML'
+                    <h2>Kişisel Verilerin Korunması</h2>
+                    <p>Dost TV olarak kişisel verilerinizin güvenliğine önem veriyoruz. 6698 sayılı Kişisel Verilerin Korunması Kanunu uyarınca verileriniz gizlilik esasına uygun olarak işlenmektedir.</p>
+                    HTML,
+            ],
+            [
                 'title' => 'İletişim',
                 'slug' => 'iletisim',
                 'show_in_menu' => true,
-                'sort_order' => 5,
+                'show_in_footer' => true,
+                'page_type' => 'corporate',
+                'sort_order' => 6,
                 'content' => <<<'HTML'
                     <h2>Adres</h2>
                     <p>Zübeyde Hanım, İstanbul Cad., Devrez Sok. No:1, 06070 Altındağ/Ankara</p>

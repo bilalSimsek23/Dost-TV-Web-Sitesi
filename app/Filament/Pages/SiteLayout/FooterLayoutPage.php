@@ -7,22 +7,28 @@ use App\Models\Page as PageModel;
 use App\Models\SiteSetting;
 use App\Support\SiteCache;
 use BackedEnum;
+use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\Placeholder;
+use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\Toggle;
 use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Forms\Contracts\HasForms;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Filament\Schemas\Components\Grid;
+use Filament\Actions\Concerns\InteractsWithActions;
+use Filament\Actions\Contracts\HasActions;
 use Filament\Schemas\Components\Tabs;
 use Filament\Schemas\Components\Tabs\Tab;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Illuminate\Database\Eloquent\Collection;
 
-class FooterLayoutPage extends Page implements HasForms
+class FooterLayoutPage extends Page implements HasForms, HasActions
 {
     use InteractsWithForms;
+    use InteractsWithActions;
 
     protected string $view = 'filament.pages.site-layout.footer-layout';
 
@@ -79,24 +85,51 @@ class FooterLayoutPage extends Page implements HasForms
                                     ->columnSpanFull(),
                             ]),
 
-                        // 2. İletişim Sekmesi
-                        Tab::make('İletişim')
-                            ->icon('heroicon-o-phone')
+                        // 2. Önerilen Siteler Sekmesi
+                        Tab::make('Önerilen Siteler')
+                            ->icon('heroicon-o-arrow-top-right-on-square')
                             ->schema([
-                                Grid::make(2)->schema([
-                                    TextInput::make('phone')
-                                        ->label('Telefon Numarası')
-                                        ->placeholder('+90 (312) 341 21 21')
-                                        ->maxLength(50)
-                                        ->helperText('Footer İletişim sütununda tel: bağlantısı olarak gösterilir.'),
+                                Repeater::make('recommended_sites')
+                                    ->label('Dış Web Siteleri / Önerilen Bağlantılar')
+                                    ->itemLabel(fn (array $state): ?string => $state['name'] ?? 'Yeni Önerilen Site')
+                                    ->addActionLabel('Yeni Site Ekle')
+                                    ->reorderable()
+                                    ->collapsible()
+                                    ->cloneable()
+                                    ->defaultItems(0)
+                                    ->schema([
+                                        Grid::make(2)->schema([
+                                            TextInput::make('name')
+                                                ->label('Site Adı')
+                                                ->required()
+                                                ->placeholder('Örn: Kalbî')
+                                                ->maxLength(100),
 
-                                    TextInput::make('email')
-                                        ->label('E-Posta Adresi')
-                                        ->email()
-                                        ->placeholder('iletisim@dosttv.com')
-                                        ->maxLength(100)
-                                        ->helperText('Footer İletişim sütununda mailto: bağlantısı olarak gösterilir.'),
-                                ]),
+                                            FileUpload::make('logo')
+                                                ->label('Logo / Profil Görseli')
+                                                ->image()
+                                                ->disk('public')
+                                                ->directory('recommended-sites')
+                                                ->visibility('public')
+                                                ->avatar(),
+
+                                            TextInput::make('url')
+                                                ->label('Web Sitesi Adresi')
+                                                ->url()
+                                                ->required()
+                                                ->placeholder('https://kalbi.com.tr')
+                                                ->columnSpanFull(),
+
+                                            Toggle::make('target_blank')
+                                                ->label('Yeni Sekmede Aç')
+                                                ->default(true),
+
+                                            Toggle::make('is_active')
+                                                ->label('Aktif')
+                                                ->default(true),
+                                        ]),
+                                    ])
+                                    ->columnSpanFull(),
                             ]),
 
                         // 3. Sosyal Medya Sekmesi
@@ -152,29 +185,21 @@ class FooterLayoutPage extends Page implements HasForms
                                     ->helperText('Footer alt satırında yalnız bir kez gösterilir. {year} otomatik yıla dönüşür.')
                                     ->maxLength(150),
                             ]),
-
-                        // 5. Önizleme Sekmesi
-                        Tab::make('Önizleme')
-                            ->icon('heroicon-o-eye')
-                            ->schema([
-                                Placeholder::make('footer_preview')
-                                    ->hiddenLabel()
-                                    ->content(fn (callable $get) => view('filament.pages.site-layout.partials.footer-preview-card', [
-                                        'phone' => $get('phone'),
-                                        'email' => $get('email'),
-                                        'facebookUrl' => $get('facebook_url'),
-                                        'instagramUrl' => $get('instagram_url'),
-                                        'xUrl' => $get('x_url'),
-                                        'youtubeUrl' => $get('youtube_url'),
-                                        'whatsappUrl' => $get('whatsapp_url'),
-                                        'telegramUrl' => $get('telegram_url'),
-                                        'copyrightText' => $get('copyright_text'),
-                                    ]))
-                                    ->columnSpanFull(),
-                            ]),
                     ])
                     ->columnSpanFull(),
             ]);
+    }
+
+    protected function getHeaderActions(): array
+    {
+        return [
+            \Filament\Actions\Action::make('previewInNewTab')
+                ->label('Yeni Sekmede Önizle')
+                ->icon('heroicon-o-arrow-top-right-on-square')
+                ->color('gray')
+                ->url(url('/#footer'))
+                ->openUrlInNewTab(),
+        ];
     }
 
     public function getCorporatePagesProperty(): Collection
@@ -202,6 +227,19 @@ class FooterLayoutPage extends Page implements HasForms
 
         Notification::make()
             ->title('Kurumsal sayfalar sıralaması güncellendi.')
+            ->success()
+            ->send();
+    }
+
+    public function toggleFooterVisibility(int $pageId): void
+    {
+        $page = PageModel::findOrFail($pageId);
+        $page->update(['show_in_footer' => ! $page->show_in_footer]);
+
+        SiteCache::forgetSiteSetting();
+
+        Notification::make()
+            ->title($page->show_in_footer ? 'Sayfa footer\'da gösteriliyor.' : 'Sayfa footer\'dan gizlendi.')
             ->success()
             ->send();
     }

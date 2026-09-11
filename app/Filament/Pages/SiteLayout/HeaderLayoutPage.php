@@ -20,6 +20,7 @@ use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Forms\Contracts\HasForms;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
+use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Tabs;
 use Filament\Schemas\Components\Tabs\Tab;
 use Filament\Schemas\Schema;
@@ -63,7 +64,9 @@ class HeaderLayoutPage extends Page implements HasForms, HasActions
     public function mount(): void
     {
         $settings = SiteSetting::current();
-        $this->form->fill($settings->toArray());
+        $this->form->fill(array_merge($settings->toArray(), [
+            'header_responsive_settings' => $settings->normalized_header_responsive_settings,
+        ]));
     }
 
     public function form(Schema $schema): Schema
@@ -130,6 +133,71 @@ class HeaderLayoutPage extends Page implements HasForms, HasActions
                                     ->label('Arama İkonunu Göster')
                                     ->helperText('Header üzerinde hızlı arama seçeneğini aktifleştirir.')
                                     ->default(true),
+                            ]),
+
+                        // 4. Mobil ve Cihaz Ölçekleme Sekmesi
+                        Tab::make('Mobil ve Cihaz Ölçekleme')
+                            ->icon('heroicon-o-device-phone-mobile')
+                            ->schema([
+                                Section::make('Masaüstü Header Ölçüleri')
+                                    ->schema([
+                                        TextInput::make('header_responsive_settings.desktop.header_height')
+                                            ->label('Yükseklik (px)')
+                                            ->numeric()
+                                            ->default(80),
+                                        TextInput::make('header_responsive_settings.desktop.logo_width')
+                                            ->label('Logo Genişliği (px)')
+                                            ->numeric()
+                                            ->default(140),
+                                        TextInput::make('header_responsive_settings.desktop.live_button_height')
+                                            ->label('Canlı Buton Yüksekliği (px)')
+                                            ->numeric()
+                                            ->default(40),
+                                        TextInput::make('header_responsive_settings.desktop.live_button_font_size')
+                                            ->label('Canlı Buton Metin (px)')
+                                            ->numeric()
+                                            ->default(14),
+                                    ])->columns(4),
+
+                                Section::make('Tablet Header Ölçüleri')
+                                    ->schema([
+                                        TextInput::make('header_responsive_settings.tablet.header_height')
+                                            ->label('Yükseklik (px)')
+                                            ->numeric()
+                                            ->default(72),
+                                        TextInput::make('header_responsive_settings.tablet.logo_width')
+                                            ->label('Logo Genişliği (px)')
+                                            ->numeric()
+                                            ->default(120),
+                                        TextInput::make('header_responsive_settings.tablet.live_button_height')
+                                            ->label('Canlı Buton Yüksekliği (px)')
+                                            ->numeric()
+                                            ->default(36),
+                                        TextInput::make('header_responsive_settings.tablet.live_button_font_size')
+                                            ->label('Canlı Buton Metin (px)')
+                                            ->numeric()
+                                            ->default(13),
+                                    ])->columns(4),
+
+                                Section::make('Mobil Header Ölçüleri')
+                                    ->schema([
+                                        TextInput::make('header_responsive_settings.mobile.header_height')
+                                            ->label('Yükseklik (px)')
+                                            ->numeric()
+                                            ->default(60),
+                                        TextInput::make('header_responsive_settings.mobile.logo_width')
+                                            ->label('Logo Genişliği (px)')
+                                            ->numeric()
+                                            ->default(105),
+                                        TextInput::make('header_responsive_settings.mobile.live_button_height')
+                                            ->label('Canlı Buton Yüksekliği (px)')
+                                            ->numeric()
+                                            ->default(32),
+                                        TextInput::make('header_responsive_settings.mobile.live_button_font_size')
+                                            ->label('Canlı Buton Metin (px)')
+                                            ->numeric()
+                                            ->default(12),
+                                    ])->columns(4),
                             ]),
                     ])
                     ->columnSpanFull(),

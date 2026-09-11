@@ -44,6 +44,7 @@ class Announcement extends Model
         'is_active',
         'sort_order',
         'created_by',
+        'popup_settings',
     ];
 
     protected $casts = [
@@ -52,7 +53,27 @@ class Announcement extends Model
         'starts_at' => 'datetime',
         'ends_at' => 'datetime',
         'sort_order' => 'integer',
+        'popup_settings' => 'array',
     ];
+
+    public function getNormalizedPopupSettingsAttribute(): array
+    {
+        $defaults = [
+            'dismissible' => true,
+            'backdrop_close' => false,
+            'esc_close' => true,
+            'delay_seconds' => 0,
+            'auto_close_enabled' => false,
+            'auto_close_seconds' => 0,
+            'repeat_mode' => '24_hours',
+        ];
+
+        if (empty($this->popup_settings) || ! is_array($this->popup_settings)) {
+            return $defaults;
+        }
+
+        return array_merge($defaults, $this->popup_settings);
+    }
 
     protected static function booted(): void
     {

@@ -9,6 +9,8 @@ use Filament\Actions\EditAction;
 use Filament\Notifications\Notification;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Columns\TextInputColumn;
+use Filament\Tables\Columns\ToggleColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Filters\TernaryFilter;
 use Filament\Tables\Table;
@@ -29,10 +31,10 @@ class ProgramsTable
 
                 TextColumn::make('categories.name')
                     ->label('Kategoriler')
+                    ->searchable()
                     ->badge()
                     ->color('primary')
                     ->separator(', '),
-
                 TextColumn::make('episodes_count')
                     ->label('Bölüm Sayısı')
                     ->counts('episodes')
@@ -75,22 +77,43 @@ class ProgramsTable
                     })
                     ->tooltip('Görünürlüğü değiştirmek için tıklayın'),
 
-                IconColumn::make('is_featured')
-                    ->label('Öne Çıkan')
-                    ->boolean()
-                    ->trueIcon('heroicon-s-star')
-                    ->falseIcon('heroicon-o-star')
-                    ->trueColor('amber')
-                    ->falseColor('gray')
-                    ->action(function (Program $record) {
-                        $newFeatured = ! $record->is_featured;
-                        $record->update(['is_featured' => $newFeatured]);
-                        Notification::make()
-                            ->title("{$record->name} " . ($newFeatured ? 'öne çıkarıldı.' : 'öne çıkanlardan kaldırıldı.'))
-                            ->success()
-                            ->send();
+                ToggleColumn::make('is_featured')
+                    ->label('Hero')
+                    ->tooltip("Programın ana sayfa Hero slider'ında görünürlüğünü değiştirmek için tıklayın"),
+
+                TextInputColumn::make('sort_order')
+                    ->label('Hero Sırası')
+                    ->rules(['required', 'integer', 'min:0'])
+                    ->sortable()
+                    ->tooltip('Hero slider gösterim sırası (küçük sayı önce gösterilir)'),
+
+                TextColumn::make('hero_days')
+                    ->label('Hero Günleri')
+                    ->badge()
+                    ->color(fn ($state, Program $record) => ! $record->is_featured ? 'gray' : (empty($state) ? 'success' : 'info'))
+                    ->formatStateUsing(function ($state, Program $record) {
+                        if (! $record->is_featured) {
+                            return 'Kapalı';
+                        }
+
+                        if (empty($state)) {
+                            return 'Her Gün';
+                        }
+
+                        $dayLabels = [
+                            'monday' => 'Pzt',
+                            'tuesday' => 'Sal',
+                            'wednesday' => 'Çar',
+                            'thursday' => 'Per',
+                            'friday' => 'Cum',
+                            'saturday' => 'Cmt',
+                            'sunday' => 'Paz',
+                        ];
+
+                        $shortDays = array_map(fn ($d) => $dayLabels[$d] ?? $d, (array) $state);
+                        return implode(', ', $shortDays);
                     })
-                    ->tooltip(fn (Program $record) => $record->is_featured ? 'Öne çıkandan kaldırmak için tıklayın' : 'Öne çıkarmak için tıklayın'),
+                    ->toggleable(isToggledHiddenByDefault: false),
             ])
             ->filters([
                 SelectFilter::make('status')
@@ -104,18 +127,42 @@ class ProgramsTable
                 TernaryFilter::make('show_on_public')
                     ->label('Public Görünürlük'),
 
-                TernaryFilter::make('is_featured')
-                    ->label('Öne Çıkanlar'),
+                TernaryFilter::make('in_schedule')
+                    ->label('Yayın Akışında Olanlar')
+                    ->placeholder('Tüm Programlar')
+                    ->trueLabel('Yayın Akışında Var')
+                    ->falseLabel('Yayın Akışında Yok')
+                    ->queries(
+                        true: function (Builder $query) {
+                            $ids = app(\App\Services\Home\HomepageDataService::class)->resolveActivePeriodWeeklyPrograms()->pluck('id')->all();
+                            return empty($ids) ? $query->whereRaw('1 = 0') : $query->whereIn('id', $ids);
+                        },
+                        false: function (Builder $query) {
+                            $ids = app(\App\Services\Home\HomepageDataService::class)->resolveActivePeriodWeeklyPrograms()->pluck('id')->all();
+                            return empty($ids) ? $query : $query->whereNotIn('id', $ids);
+                        },
+                        blank: fn (Builder $query) => $query,
+                    ),
+
+                TernaryFilter::make('is_live_scheduled')
+                    ->label('Canlı Yayınlananlar')
+                    ->placeholder('Tüm Programlar')
+                    ->trueLabel('Canlı Programlar')
+                    ->falseLabel('Bant Programlar')
+                    ->queries(
+                        true: function (Builder $query) {
+                            $ids = app(\App\Services\Home\HomepageDataService::class)->resolveActivePeriodWeeklyLivePrograms()->pluck('id')->all();
+                            return empty($ids) ? $query->whereRaw('1 = 0') : $query->whereIn('id', $ids);
+                        },
+                        false: function (Builder $query) {
+                            $ids = app(\App\Services\Home\HomepageDataService::class)->resolveActivePeriodWeeklyLivePrograms()->pluck('id')->all();
+                            return empty($ids) ? $query : $query->whereNotIn('id', $ids);
+                        },
+                        blank: fn (Builder $query) => $query,
+                    ),
             ])
             ->actions([
                 EditAction::make(),
-
-                Action::make('preview')
-                    ->label('Önizle')
-                    ->icon('heroicon-o-arrow-top-right-on-square')
-                    ->color('gray')
-                    ->url(fn (Program $record) => route('programs.show', $record))
-                    ->openUrlInNewTab(),
 
                 Action::make('archive')
                     ->label('Yönetim Arşivine Al')

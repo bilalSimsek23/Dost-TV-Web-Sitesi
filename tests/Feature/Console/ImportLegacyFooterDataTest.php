@@ -99,7 +99,7 @@ class ImportLegacyFooterDataTest extends TestCase
 
         $this->get(route('home'))
             ->assertSuccessful()
-            ->assertSee('iletisim@dosttv.com')
+            ->assertDontSee('iletisim@dosttv.com')
             ->assertSee('Tüm hakları saklıdır.');
     }
 }

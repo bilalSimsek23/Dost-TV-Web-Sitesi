@@ -66,7 +66,7 @@ class PageResourceTest extends TestCase
             ->assertSee('Genel Bilgiler')
             ->assertSee('İçerik')
             ->assertSee('SEO')
-            ->assertSee('Önizleme')
+            ->assertDontSee('Önizleme')
             ->assertDontSee('Sitedeki Konum')
             ->assertDontSee('Menüde Göster')
             ->assertDontSee('Header\'da Göster')

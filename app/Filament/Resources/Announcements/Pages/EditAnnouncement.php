@@ -13,6 +13,12 @@ class EditAnnouncement extends EditRecord
     protected function getHeaderActions(): array
     {
         return [
+            \Filament\Actions\Action::make('previewInNewTab')
+                ->label('Yeni Sekmede Önizle')
+                ->icon('heroicon-o-arrow-top-right-on-square')
+                ->color('gray')
+                ->url(fn ($record) => $record->button_url ?: url('/'))
+                ->openUrlInNewTab(),
             DeleteAction::make(),
         ];
     }

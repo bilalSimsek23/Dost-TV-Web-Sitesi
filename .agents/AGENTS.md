@@ -135,5 +135,55 @@ Her geliştirmede ve kod değişikliğinde şu sorular sorulur ve uygulanır:
 
 ---
 
+## 🏛️ DOST TV BUILDER — SABİT KURALLAR v1
+
+Bu kurallar tasarımdan bağımsızdır. Yeni tasarım, panel veya component değişikliklerinde KORUNACAKTIR.
+
+1. **TASARIM ≠ İŞ MANTIĞI**: Renk, kart, şerit, boşluk, slider, rozet, tipografi değişebilir. Veri kaynağı, navigasyon, aktif yayın ve publish mantığı değişmez.
+2. **HOMEPAGE BUILDER**: Preview = `draft_sections`, Public = `published_sections`. Publish yapılmadan public değişmez. Header / Hero / Footer sabit ve korunur. Gereksiz DB/migration yapılmaz.
+3. **YAYIN AKIŞI**: Mevcut gerçek schedule altyapısını kullan. `BroadcastScheduleResolver` korunur. Ana sayfada bugünün tüm TV yayınları erişilebilir olmalı. Görünür öğe sayısı içerik limiti değildir. Aktif yayın saate göre hesaplanır. "ŞİMDİ" sadece aktif yayında; "SIRADAKİ" sadece hemen sonraki yayında. Açılışta aktif yayın varsa ona odaklan; yoksa en yakın sıradaki yayına git. Geçmiş yayınlar saklanır.
+4. **YAYIN AKIŞI LİNKLERİ**:
+   - AKTİF + CANLI: → `route('live.tv')`
+   - DİĞER BAĞLI YAYIN: → `route('programs.show', $item->program)`
+   - PROGRAM İLİŞKİSİ YOK: → Link oluşturma.
+   - Episode/video detayına yönlendirme YOK. Programı isim veya slug tahminiyle eşleştirme YOK. Mevcut Program relation / `program_id` kullan.
+5. **TÜM AKIŞ**: Yeni route oluşturma. Header'daki mevcut Yayın Akışı sayfasına bağlan (`route('schedule.index')`).
+6. **PROGRAM / KATEGORİ / VİDEO RAFLARI**: Grid ve Yatay birbirinden ayrı davranır. Yatayda içerikler alta düşmez, sağa doğru tek hizada devam eder. Satır/sütun değerleri içerik limiti değildir. "Tümü" seçildiğinde bütün uygun içerik erişilebilir kalır. Mobil/tablet responsive otomatik çalışır.
+7. **GENEL KURAL**: Çalışan özelliği gereksiz refactor etme. Yeni tasarım yaparken sabit iş kurallarını değiştirme. Mevcut route/service/relation varsa yeniden üretme.
+
+---
+
+## 🛡️ DOST TV — FRONTEND BUILD GÜVENLİK KURALI
+
+Tailwind, CSS, arbitrary utility, z-index, responsive class veya yeni frontend class değişikliği yapılan her görevde:
+
+1. `npm run build` çalıştır.
+2. `public/build/manifest.json` güncellendi mi doğrula.
+3. Yeni CSS asset hash'ini raporla.
+4. Değiştirilen kritik class/utility'nin derlenmiş CSS asset içinde gerçekten bulunduğunu doğrula.
+5. Hard refresh / production asset davranışını kontrol et.
+6. Kaynak kod ile `public/build` asset farklıysa görevi tamamlanmış sayma.
+
+**Zorunlu Alanlar:**
+- Popup / Modal
+- z-index
+- Slider
+- Responsive layout
+- Custom Tailwind arbitrary class
+- Yeni utility class
+- CSS import / değişiklikleri
+
+Mümkünse kritik modal/popup katmanlarında build bağımsız güvenli fallback (ör. inline style) bırak.
+
+**Görev Sonu Raporlama:**
+- Build çalıştı mı?
+- Yeni asset adı
+- Kritik class derlendi mi?
+- Hard refresh sonucu
+
+---
+
 ## 🎯 Kabul Kriteri
 "DOST TV yönetim paneli, WordPress kadar kolay, Shopify kadar düzenli ve televizyon yayıncılığına özel bir CMS hissi vermelidir."
+
+

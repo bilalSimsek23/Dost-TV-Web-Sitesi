@@ -13,6 +13,7 @@ class AnnouncementPopup extends Component
     public ?string $imageUrl = null;
     public ?string $buttonText = null;
     public ?string $buttonUrl = null;
+    public array $popupSettings = [];
 
     public function __construct(
         public bool $preview = false,
@@ -29,6 +30,7 @@ class AnnouncementPopup extends Component
             $rawImg = $image ?? ($announcement ? $announcement->image : null);
             $this->buttonText = $buttonText ?? ($announcement ? $announcement->button_text : null);
             $this->buttonUrl = $buttonUrl ?? ($announcement ? $announcement->button_url : null);
+            $this->popupSettings = $announcement ? $announcement->normalized_popup_settings : (new Announcement)->normalized_popup_settings;
 
             $this->imageUrl = self::resolveImageUrl($rawImg);
         } else {
@@ -39,6 +41,7 @@ class AnnouncementPopup extends Component
                 $this->buttonText = $this->announcement->button_text;
                 $this->buttonUrl = $this->announcement->button_url;
                 $this->imageUrl = self::resolveImageUrl($this->announcement->image);
+                $this->popupSettings = $this->announcement->normalized_popup_settings;
             }
         }
     }

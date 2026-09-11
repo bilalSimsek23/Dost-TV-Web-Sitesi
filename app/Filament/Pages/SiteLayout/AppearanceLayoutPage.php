@@ -7,6 +7,10 @@ use App\Models\SiteSetting;
 use App\Models\ThemeSetting;
 use App\Support\SiteCache;
 use BackedEnum;
+use Filament\Actions\Action;
+use Filament\Actions\Concerns\InteractsWithActions;
+use Filament\Actions\Contracts\HasActions;
+use Filament\Forms\Components\ColorPicker;
 use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Radio;
 use Filament\Forms\Components\Select;
@@ -16,15 +20,18 @@ use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Forms\Contracts\HasForms;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
+use Filament\Schemas\Components\Grid;
+use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Tabs;
 use Filament\Schemas\Components\Tabs\Tab;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Illuminate\Support\HtmlString;
 
-class AppearanceLayoutPage extends Page implements HasForms
+class AppearanceLayoutPage extends Page implements HasForms, HasActions
 {
     use InteractsWithForms;
+    use InteractsWithActions;
 
     protected string $view = 'filament.pages.site-layout.appearance-layout';
 
@@ -53,9 +60,12 @@ class AppearanceLayoutPage extends Page implements HasForms
         $defaultFont = FontFamily::where('is_default', true)->first() ?? FontFamily::first();
         $reducedMotion = ThemeSetting::where('key', 'accessibility.reduced_motion_support')->first()?->value === '1';
 
+        $themeSettings = $settings->normalized_theme_settings;
+
         $this->form->fill([
             'active_font_id' => $defaultFont?->id,
-            'theme_mode' => 'dark',
+            'theme_mode' => $themeSettings['mode'] ?? 'dark',
+            'theme_settings' => $themeSettings,
             'reduced_motion' => $reducedMotion,
             'corner_radius' => 'default',
             'shadow_intensity' => 'default',
@@ -70,6 +80,138 @@ class AppearanceLayoutPage extends Page implements HasForms
             ->components([
                 Tabs::make('appearance-layout-tabs')
                     ->tabs([
+                        Tab::make('Tema Ayarları & Renkler')
+                            ->schema([
+                                Radio::make('theme_settings.mode')
+                                    ->label('Public Tema Modu (Theme Mode)')
+                                    ->options([
+                                        'dark' => 'Koyu Tema (Dark Mode - Dost TV Standardı)',
+                                        'light' => 'Açık Tema (Light Mode)',
+                                        'system' => 'Sistem Tercihini Kullan (System / prefers-color-scheme)',
+                                    ])
+                                    ->default('dark')
+                                    ->live()
+                                    ->helperText('Site genelinde aktif olacak renk temasını seçin.'),
+
+                                Section::make('Koyu Tema (Dark Mode) Renkleri')
+                                    ->description('Dark Mode aktifken geçerli ana zemin, yüzey ve vurgu renkleri.')
+                                    ->schema([
+                                        Grid::make(3)->schema([
+                                            ColorPicker::make('theme_settings.dark.background')
+                                                ->label('Ana Zemin (Background)')
+                                                ->required()
+                                                ->live(),
+
+                                            ColorPicker::make('theme_settings.dark.surface')
+                                                ->label('İkincil Yüzey (Surface / Card)')
+                                                ->required()
+                                                ->live(),
+
+                                            ColorPicker::make('theme_settings.dark.accent')
+                                                ->label('Vurgu Rengi (Accent / CTA)')
+                                                ->required()
+                                                ->live(),
+                                        ]),
+                                    ]),
+
+                                Section::make('Açık Tema (Light Mode) Renkleri')
+                                    ->description('Light Mode aktifken geçerli ana zemin, yüzey ve vurgu renkleri.')
+                                    ->schema([
+                                        Grid::make(3)->schema([
+                                            ColorPicker::make('theme_settings.light.background')
+                                                ->label('Ana Zemin (Background)')
+                                                ->required()
+                                                ->live(),
+
+                                            ColorPicker::make('theme_settings.light.surface')
+                                                ->label('İkincil Yüzey (Surface / Card)')
+                                                ->required()
+                                                ->live(),
+
+                                            ColorPicker::make('theme_settings.light.accent')
+                                                ->label('Vurgu Rengi (Accent / CTA)')
+                                                ->required()
+                                                ->live(),
+                                        ]),
+                                    ]),
+
+                                Section::make('SAYFA GRADIENT AYARLARI (ÇİFT YÖNLÜ)')
+                                    ->description('Ana sayfa dikey yüksekliğine göre otomatik çalışan KOYU -> AÇIK -> KOYU çift yönlü renk geçişini özelleştirin.')
+                                    ->schema([
+                                        Toggle::make('theme_settings.page_gradient.enabled')
+                                            ->label('Sayfa Gradient\'ını Kullan')
+                                            ->default(false)
+                                            ->live()
+                                            ->columnSpanFull()
+                                            ->helperText('Kapalı olduğunda (varsayılan) ana sayfa normal koyu DOST TV zemin rengini kullanır. Açıldığında dikey renk geçişi devreye girer.'),
+
+                                        Section::make('ÜSTTEN AÇILMA')
+                                            ->schema([
+                                                Grid::make(3)->schema([
+                                                    \Filament\Forms\Components\TextInput::make('theme_settings.page_gradient.top_dark_hold')
+                                                        ->label('Üst Koyu Alan Bitişi (%)')
+                                                        ->numeric()
+                                                        ->minValue(0)
+                                                        ->maxValue(70)
+                                                        ->default(25),
+
+                                                    \Filament\Forms\Components\TextInput::make('theme_settings.page_gradient.top_fade_start')
+                                                        ->label('Açılma Başlangıcı (%)')
+                                                        ->numeric()
+                                                        ->minValue(0)
+                                                        ->maxValue(90)
+                                                        ->default(25),
+
+                                                    \Filament\Forms\Components\TextInput::make('theme_settings.page_gradient.light_zone_start')
+                                                        ->label('Açık Alana Ulaşma (%)')
+                                                        ->numeric()
+                                                        ->minValue(0)
+                                                        ->maxValue(100)
+                                                        ->default(50),
+                                                ]),
+                                            ]),
+
+                                        Section::make('ORTA / ALTTAN KOYULAŞMA')
+                                            ->schema([
+                                                Grid::make(3)->schema([
+                                                    \Filament\Forms\Components\TextInput::make('theme_settings.page_gradient.light_zone_end')
+                                                        ->label('Açık Alan Bitişi (%)')
+                                                        ->numeric()
+                                                        ->minValue(0)
+                                                        ->maxValue(100)
+                                                        ->default(65),
+
+                                                    \Filament\Forms\Components\TextInput::make('theme_settings.page_gradient.bottom_fade_start')
+                                                        ->label('Alttan Koyulaşma Başlangıcı (%)')
+                                                        ->numeric()
+                                                        ->minValue(0)
+                                                        ->maxValue(100)
+                                                        ->default(65),
+
+                                                    \Filament\Forms\Components\TextInput::make('theme_settings.page_gradient.bottom_dark_at')
+                                                        ->label('Tam Koyu Olma Noktası (%)')
+                                                        ->numeric()
+                                                        ->minValue(40)
+                                                        ->maxValue(100)
+                                                        ->default(100),
+                                                ]),
+                                            ]),
+
+                                        Section::make('RENKLER')
+                                            ->schema([
+                                                Grid::make(2)->schema([
+                                                    ColorPicker::make('theme_settings.page_gradient.light_color')
+                                                        ->label('Açık Orta Alan Rengi')
+                                                        ->default('#F5F2E8'),
+
+                                                    ColorPicker::make('theme_settings.page_gradient.bottom_color')
+                                                        ->label('Alt Bitiş Rengi (DOST TV Koyu Zemin)')
+                                                        ->default('#030712'),
+                                                ]),
+                                            ]),
+                                    ]),
+                            ]),
+
                         Tab::make('Tipografi')
                             ->schema([
                                 Select::make('active_font_id')
@@ -109,18 +251,6 @@ class AppearanceLayoutPage extends Page implements HasForms
                                         ");
                                     })
                                     ->columnSpanFull(),
-                            ]),
-
-                        Tab::make('Tema Modu')
-                            ->schema([
-                                Radio::make('theme_mode')
-                                    ->label('Varsayılan Görünüm Modu')
-                                    ->options([
-                                        'dark' => 'Koyu Tema (Dost TV Tasarım Standardı)',
-                                        'system' => 'Sistem Tercihini Kullan',
-                                    ])
-                                    ->default('dark')
-                                    ->helperText('DOST TV public arayüzü yüksek kontrastlı modern Koyu Tema (Dark Mode) standartlarında tasarlanmıştır.'),
                             ]),
 
                         Tab::make('Efektler ve Davranış')
@@ -171,38 +301,11 @@ class AppearanceLayoutPage extends Page implements HasForms
                                     ->content(function () {
                                         return new HtmlString("
                                             <div class='p-3 rounded-lg bg-slate-900 border border-slate-700/80 text-xs space-y-2'>
-                                                <div class='flex flex-wrap items-center justify-between gap-3'>
-                                                    <a href='/admin/theme-settings' class='text-xs text-amber-400 hover:text-amber-300 font-medium hover:underline inline-flex items-center gap-1'>
-                                                        Tema Ayarlarını Aç (ThemeSetting →)
-                                                    </a>
+                                                <div class='flex flex-wrap items-center justify-end gap-3'>
                                                     <a href='/admin/font-families' class='text-xs text-rose-400 hover:text-rose-300 font-medium hover:underline inline-flex items-center gap-1'>
                                                         Fontları Yönet (FontFamily →)
                                                     </a>
                                                 </div>
-                                            </div>
-                                        ");
-                                    })
-                                    ->columnSpanFull(),
-                            ]),
-
-                        Tab::make('Önizleme')
-                            ->schema([
-                                Placeholder::make('appearance_simulated_preview')
-                                    ->hiddenLabel()
-                                    ->content(function (callable $get) {
-                                        $headerView = view('components.site.header', ['preview' => true])->render();
-                                        $bannerView = view('components.site.hero-banner', [
-                                            'preview' => true,
-                                            'title' => 'DOST TV Yayın Akışı & Canlı Yayın',
-                                            'subtitle' => 'Tüm cihazlarla uyumlu, yüksek kaliteli yayın portalı.',
-                                        ])->render();
-                                        $footerView = view('components.site.footer', ['preview' => true])->render();
-
-                                        return new HtmlString("
-                                            <div class='w-full max-w-[1150px] mx-auto overflow-hidden rounded-xl border border-slate-700/80 shadow-2xl bg-slate-950 p-1 space-y-3'>
-                                                <div>{$headerView}</div>
-                                                <div>{$bannerView}</div>
-                                                <div>{$footerView}</div>
                                             </div>
                                         ");
                                     })
@@ -238,19 +341,60 @@ class AppearanceLayoutPage extends Page implements HasForms
 
         // 3. Update reduced motion setting in ThemeSetting
         ThemeSetting::where('key', 'accessibility.reduced_motion_support')
-            ->update(['value' => $data['reduced_motion'] ? '1' : '0']);
+            ->update(['value' => ! empty($data['reduced_motion']) ? '1' : '0']);
 
-        // 4. Update SiteSetting custom_css
-        SiteSetting::current()->update([
+        // 4. Update SiteSetting custom_css & theme_settings
+        $siteSettings = SiteSetting::current();
+        $siteSettings->update([
             'custom_css' => $data['custom_css'] ?? null,
+            'theme_settings' => $data['theme_settings'] ?? $siteSettings->normalized_theme_settings,
         ]);
 
         SiteCache::forgetSiteSetting();
         SiteCache::forgetTheme();
 
         Notification::make()
-            ->title('Görünüm ayarları başarıyla kaydedildi.')
+            ->title('Görünüm Ayarları Güncellendi')
+            ->body('Tema ve görünüm değişiklikleriniz başarıyla kaydedildi.')
             ->success()
             ->send();
+    }
+
+    public function livePreview(): void
+    {
+        $data = $this->form->getRawState();
+        $themeSettings = $data['theme_settings'] ?? SiteSetting::current()->normalized_theme_settings;
+
+        $previewToken = \Illuminate\Support\Str::random(32);
+        $previewData = [
+            'theme_settings' => $themeSettings,
+            'mode' => $themeSettings['mode'] ?? 'dark',
+            'token' => $previewToken,
+        ];
+
+        session()->put('theme_preview_data', $previewData);
+        session()->put('theme_preview_token', $previewToken);
+        \Illuminate\Support\Facades\Cache::put('theme_preview_' . $previewToken, $previewData, now()->addHours(2));
+
+        Notification::make()
+            ->title('Canlı Tema Test Modu Başlatıldı')
+            ->body('Tema ayarlarınız DB\'ye kaydedilmeden yeni sekmede test ediliyor.')
+            ->warning()
+            ->send();
+
+        $previewUrl = url('/?theme_preview_token=' . $previewToken);
+        $this->js("window.open('{$previewUrl}', '_blank');");
+    }
+
+    protected function getHeaderActions(): array
+    {
+        return [
+            Action::make('previewInNewTab')
+                ->label('Yeni Sekmede Önizle')
+                ->icon('heroicon-o-arrow-top-right-on-square')
+                ->color('gray')
+                ->url(url('/'))
+                ->openUrlInNewTab(),
+        ];
     }
 }

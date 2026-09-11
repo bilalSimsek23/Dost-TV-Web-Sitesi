@@ -107,24 +107,6 @@ class BannerForm
                                     ->numeric()
                                     ->default(0),
                             ]),
-
-                        Tab::make('Önizleme')
-                            ->schema([
-                                Placeholder::make('hero_banner_preview')
-                                    ->hiddenLabel()
-                                    ->content(function (?Banner $record, callable $get) {
-                                        $image = $get('image') ?? ($record ? $record->image : null);
-
-                                        return view('components.site.hero-banner', [
-                                            'preview' => true,
-                                            'title' => $get('title') ?? ($record ? $record->title : 'Banner Başlığı'),
-                                            'subtitle' => $get('subtitle') ?? ($record ? $record->subtitle : null),
-                                            'image' => $image,
-                                            'linkUrl' => $get('link_url') ?? ($record ? $record->link_url : null),
-                                        ]);
-                                    })
-                                    ->columnSpanFull(),
-                            ]),
                     ])
                     ->columnSpanFull(),
             ]);

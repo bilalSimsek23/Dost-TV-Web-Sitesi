@@ -36,17 +36,11 @@ class ThemeSettings extends Page implements HasForms
 
     protected string $view = 'filament.pages.theme-settings';
 
-    protected static ?string $navigationLabel = 'Tema Ayarları';
-
-    protected static string|\UnitEnum|null $navigationGroup = 'Site Yönetimi';
-
-    protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedSwatch;
-
-    public ?array $data = [];
+    protected static bool $shouldRegisterNavigation = false;
 
     public static function canAccess(): bool
     {
-        return auth()->user()?->hasAnyRole(['super_admin', 'administrator', 'designer']) ?? false;
+        return false;
     }
 
     public function mount(): void
@@ -61,6 +55,16 @@ class ThemeSettings extends Page implements HasForms
 
             Arr::set($nested, $key, $value);
         }
+
+        $siteSettings = \App\Models\SiteSetting::current();
+        $ts = $siteSettings->normalized_theme_settings;
+        $pageGradient = $ts['page_gradient'] ?? [];
+
+        $nested['brand']['site_name'] = $nested['brand']['site_name'] ?? $siteSettings->site_name ?? 'Dost TV';
+        $nested['page_gradient']['dark_hold_until'] = $pageGradient['dark_hold_until'] ?? 25;
+        $nested['page_gradient']['fade_start'] = $pageGradient['fade_start'] ?? 30;
+        $nested['page_gradient']['light_end'] = $pageGradient['light_end'] ?? 100;
+        $nested['page_gradient']['light_color'] = $pageGradient['light_color'] ?? '#F5F2E8';
 
         $this->form->fill($nested);
     }
@@ -89,16 +93,93 @@ class ThemeSettings extends Page implements HasForms
     public function save(): void
     {
         $service = app(ThemeSettingsService::class);
+        $state = $this->form->getState();
 
-        foreach (Arr::dot($this->form->getState()) as $key => $value) {
+        foreach (Arr::dot($state) as $key => $value) {
             $service->set($key, is_bool($value) ? ($value ? '1' : '0') : $value);
         }
 
+        $siteSettings = \App\Models\SiteSetting::current();
+        $ts = $siteSettings->normalized_theme_settings;
+
+        if (isset($state['color'])) {
+            if (! empty($state['color']['background'])) {
+                $ts['dark']['background'] = $state['color']['background'];
+            }
+            if (! empty($state['color']['surface'])) {
+                $ts['dark']['surface'] = $state['color']['surface'];
+            }
+            if (! empty($state['color']['accent'])) {
+                $ts['dark']['accent'] = $state['color']['accent'];
+            }
+        }
+
+        if (isset($state['page_gradient'])) {
+            $ts['page_gradient'] = [
+                'dark_hold_until' => (int) ($state['page_gradient']['dark_hold_until'] ?? 25),
+                'fade_start' => (int) ($state['page_gradient']['fade_start'] ?? 30),
+                'light_end' => (int) ($state['page_gradient']['light_end'] ?? 100),
+                'light_color' => $state['page_gradient']['light_color'] ?? '#F5F2E8',
+            ];
+        }
+
+        $siteSettings->update(['theme_settings' => $ts]);
+
+        \App\Support\SiteCache::forgetSiteSetting();
+        \App\Support\SiteCache::forgetTheme();
+
         Notification::make()
             ->title('Tema ayarları kaydedildi')
-            ->body('Değişiklikler public arayüze Aşama 3\'te bağlanacaktır.')
             ->success()
             ->send();
+    }
+
+    public function livePreview(): void
+    {
+        $state = $this->form->getRawState();
+        $siteSettings = \App\Models\SiteSetting::current();
+        $ts = $siteSettings->normalized_theme_settings;
+
+        if (isset($state['color'])) {
+            if (! empty($state['color']['background'])) {
+                $ts['dark']['background'] = $state['color']['background'];
+            }
+            if (! empty($state['color']['surface'])) {
+                $ts['dark']['surface'] = $state['color']['surface'];
+            }
+            if (! empty($state['color']['accent'])) {
+                $ts['dark']['accent'] = $state['color']['accent'];
+            }
+        }
+
+        if (isset($state['page_gradient'])) {
+            $ts['page_gradient'] = [
+                'dark_hold_until' => (int) ($state['page_gradient']['dark_hold_until'] ?? 25),
+                'fade_start' => (int) ($state['page_gradient']['fade_start'] ?? 30),
+                'light_end' => (int) ($state['page_gradient']['light_end'] ?? 100),
+                'light_color' => $state['page_gradient']['light_color'] ?? '#F5F2E8',
+            ];
+        }
+
+        $previewToken = \Illuminate\Support\Str::random(32);
+        $previewData = [
+            'theme_settings' => $ts,
+            'mode' => $ts['mode'] ?? 'dark',
+            'token' => $previewToken,
+        ];
+
+        session()->put('theme_preview_data', $previewData);
+        session()->put('theme_preview_token', $previewToken);
+        \Illuminate\Support\Facades\Cache::put('theme_preview_' . $previewToken, $previewData, now()->addHours(2));
+
+        Notification::make()
+            ->title('Canlı Tema Test Modu Başlatıldı')
+            ->body('Tema ayarlarınız DB\'ye kaydedilmeden yeni sekmede test ediliyor.')
+            ->warning()
+            ->send();
+
+        $previewUrl = url('/?theme_preview_token=' . $previewToken);
+        $this->js("window.open('{$previewUrl}', '_blank');");
     }
 
     private function brandFields(): array
