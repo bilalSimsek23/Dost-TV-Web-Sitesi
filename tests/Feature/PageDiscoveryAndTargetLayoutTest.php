@@ -38,11 +38,42 @@ class PageDiscoveryAndTargetLayoutTest extends TestCase
         $pColPage = $discovered->firstWhere('key', "program_collection_{$pCol->id}");
         $this->assertNotNull($pColPage);
         $this->assertEquals('/program-koleksiyonlari/one-cikan-dini-programlar', $pColPage['url']);
-        $this->assertEquals('Henüz Düzenlenmedi', $pColPage['status_label']);
+        $this->assertEquals('Henüz Tasarlanmadı', $pColPage['status_label']);
 
         $vColPage = $discovered->firstWhere('key', "video_collection_{$vCol->id}");
         $this->assertNotNull($vColPage);
         $this->assertEquals('/koleksiyonlar/secme-sohbetler', $vColPage['url']);
+    }
+
+    public function test_ensure_all_targets_exist_creates_layout_rows_for_all_system_and_collection_pages()
+    {
+        $pCol = ProgramCollection::create([
+            'name' => 'Kandil Özel',
+            'slug' => 'kandil-ozel',
+            'is_active' => true,
+        ]);
+
+        PageDiscoveryService::ensureAllTargetsExist();
+
+        $this->assertDatabaseHas('homepage_layouts', [
+            'page_type' => 'home',
+            'is_active' => false,
+        ]);
+
+        $this->assertDatabaseHas('homepage_layouts', [
+            'page_type' => 'program_detail',
+            'is_active' => false,
+        ]);
+
+        $this->assertDatabaseHas('homepage_layouts', [
+            'page_type' => 'program_collection',
+            'target_id' => $pCol->id,
+            'is_active' => false,
+        ]);
+
+        // Running twice does not duplicate base records
+        PageDiscoveryService::ensureAllTargetsExist();
+        $this->assertEquals(1, HomepageLayout::query()->where('page_type', 'program_collection')->where('target_id', $pCol->id)->count());
     }
 
     public function test_find_or_create_layout_for_target_creates_record_on_demand_without_duplicates()
@@ -109,3 +140,4 @@ class PageDiscoveryAndTargetLayoutTest extends TestCase
         $response->assertSee('Belgeseller');
     }
 }
+

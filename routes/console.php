@@ -19,3 +19,20 @@ Schedule::command('analytics:prune')
     ->daily()
     ->withoutOverlapping();
 
+Schedule::job(new \App\Jobs\SyncGa4MetricsJob)
+    ->hourly()
+    ->withoutOverlapping();
+
+Schedule::job(new \App\Jobs\SyncGoogleAdsMetricsJob)
+    ->hourly()
+    ->withoutOverlapping();
+
+Schedule::job(new \App\Jobs\SyncMetaAdsMetricsJob)
+    ->hourly()
+    ->withoutOverlapping();
+
+Schedule::job(new \App\Jobs\EvaluateAnalyticsAlertsJob)
+    ->hourly()
+    ->withoutOverlapping();
+
+

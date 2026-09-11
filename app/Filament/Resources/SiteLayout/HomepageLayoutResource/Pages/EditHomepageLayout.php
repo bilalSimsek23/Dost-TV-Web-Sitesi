@@ -187,7 +187,17 @@ class EditHomepageLayout extends EditRecord
 
         unset($drafts['_fixed_settings']);
         $this->draftSections = array_values($drafts);
+
+        // Bootstrap default sections if empty for target page_type
+        if (empty($this->draftSections)) {
+            $defaults = \App\Services\Page\PageDiscoveryService::getDefaultSectionsForPageType($this->record->page_type ?? 'home');
+            if (! empty($defaults)) {
+                $this->draftSections = $defaults;
+                $this->saveDraft(false);
+            }
+        }
     }
+
 
     public function selectBlock(?string $uuid): void
     {

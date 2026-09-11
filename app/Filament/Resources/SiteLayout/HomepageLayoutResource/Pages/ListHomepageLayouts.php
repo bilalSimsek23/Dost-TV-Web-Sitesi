@@ -3,71 +3,61 @@
 namespace App\Filament\Resources\SiteLayout\HomepageLayoutResource\Pages;
 
 use App\Filament\Resources\SiteLayout\HomepageLayoutResource\HomepageLayoutResource;
-use Filament\Actions\CreateAction;
+use App\Models\HomepageLayout;
+use App\Services\Page\PageDiscoveryService;
+use Filament\Actions\Action;
+use Filament\Forms\Components\Select;
+use Filament\Forms\Components\TextInput;
 use Filament\Resources\Pages\ListRecords;
 
 class ListHomepageLayouts extends ListRecords
 {
     protected static string $resource = HomepageLayoutResource::class;
 
+    public function mount(): void
+    {
+        PageDiscoveryService::ensureAllTargetsExist();
+        parent::mount();
+    }
+
     protected function getHeaderActions(): array
     {
         return [
-            CreateAction::make()
-                ->label('+ Yeni Sayfa Düzeni')
-                ->modalHeading('Yeni Sayfa Düzeni Oluştur')
-                ->modalDescription('Tasarlamak istediğiniz sayfa türünü ve hedefini seçin. Kaydettikten sonra doğrudan Visual Builder açılacaktır.')
+            Action::make('create_alternative')
+                ->label('+ Yeni Alternatif Düzen')
+                ->modalHeading('Yeni Alternatif Düzen Oluştur')
+                ->modalDescription('Mevcut bir sayfa için alternatif bir tasarım varyantı (ör. Ramazan, Kandil vb.) oluşturabilirsiniz.')
                 ->form([
-                    \Filament\Forms\Components\Select::make('page_type')
-                        ->label('Ne Tasarlamak İstiyorsunuz?')
-                        ->options([
-                            'home' => 'Ana Sayfa',
-                            'program_detail' => 'Program Detay Şablonu',
-                            'program_index' => 'Programlar Sayfası',
-                            'schedule' => 'Yayın Akışı',
-                            'live_tv' => 'Canlı TV',
-                            'program_collection' => 'Program Koleksiyonu',
-                            'video_collection' => 'Video Koleksiyonu',
-                        ])
-                        ->default('home')
-                        ->live()
-                        ->required(),
-
-                    \Filament\Forms\Components\Select::make('target_id_program_collection')
-                        ->label('Hangi Program Koleksiyonu?')
-                        ->options(fn () => \App\Models\ProgramCollection::query()->where('is_active', true)->orderBy('sort_order')->pluck('name', 'id'))
-                        ->searchable()
-                        ->visible(fn (callable $get) => $get('page_type') === 'program_collection')
-                        ->required(fn (callable $get) => $get('page_type') === 'program_collection'),
-
-                    \Filament\Forms\Components\Select::make('target_id_video_collection')
-                        ->label('Hangi Video Koleksiyonu?')
-                        ->options(fn () => \App\Models\VideoCollection::query()->where('is_active', true)->orderBy('name')->pluck('name', 'id'))
-                        ->searchable()
-                        ->visible(fn (callable $get) => $get('page_type') === 'video_collection')
-                        ->required(fn (callable $get) => $get('page_type') === 'video_collection'),
-
-                    \Filament\Forms\Components\TextInput::make('name')
-                        ->label('Düzen Adı (İsteğe Bağlı)')
-                        ->placeholder('Boş bırakılırsa sayfa adı otomatik atanır')
+                    TextInput::make('name')
+                        ->label('Düzen / Varyant Adı')
+                        ->placeholder('Örn: Ramazan Özel Tasarımı')
+                        ->required()
                         ->maxLength(255),
+
+                    Select::make('target_key')
+                        ->label('Hedef Sayfa')
+                        ->options(fn () => PageDiscoveryService::getSelectableTargetOptions())
+                        ->searchable()
+                        ->required(),
                 ])
                 ->action(function (array $data) {
-                    $pageType = $data['page_type'];
-                    $targetId = match ($pageType) {
-                        'program_collection' => (int) ($data['target_id_program_collection'] ?? null),
-                        'video_collection' => (int) ($data['target_id_video_collection'] ?? null),
-                        default => null,
-                    };
+                    $parts = explode('|', $data['target_key']);
+                    $pageType = $parts[0] ?? 'home';
+                    $targetId = isset($parts[1]) && $parts[1] !== '' ? (int) $parts[1] : null;
 
-                    $record = \App\Services\Page\PageDiscoveryService::findOrCreateLayoutForTarget(
-                        $pageType,
-                        $targetId,
-                        $data['name'] ?? null
-                    );
+                    $record = HomepageLayout::create([
+                        'name' => $data['name'],
+                        'page_type' => $pageType,
+                        'target_id' => $targetId,
+                        'is_active' => false,
+                        'draft_sections' => [],
+                        'published_sections' => [],
+                        'published_at' => null,
+                    ]);
 
                     return redirect(HomepageLayoutResource::getUrl('edit', ['record' => $record]));
                 }),
         ];
     }
 }
+

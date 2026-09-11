@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Models\AnalyticsAlert;
 use App\Models\NotFoundLog;
 use App\Models\SearchLog;
 use App\Models\SiteEvent;
@@ -9,15 +10,17 @@ use Illuminate\Console\Command;
 
 class PruneAnalyticsLogsCommand extends Command
 {
-    protected $signature = 'analytics:prune {--days-searches=180} {--days-events=180} {--days-not-found=365}';
+    protected $signature = 'analytics:prune {--days-searches=180} {--days-events=180} {--days-not-found=365} {--days-alerts=180}';
 
-    protected $description = 'Prune analytics search logs, site events, and not found logs beyond retention limits';
+    protected $description = 'Prune analytics search logs, site events, not found logs, and resolved alerts beyond retention limits';
 
     public function handle(): int
     {
         $searchCutoff = now()->subDays((int) $this->option('days-searches'));
         $eventCutoff = now()->subDays((int) $this->option('days-events'));
         $notFoundCutoff = now()->subDays((int) $this->option('days-not-found'));
+        $alertRetentionDays = (int) config('analytics.alerts.retention_days', (int) $this->option('days-alerts'));
+        $alertCutoff = now()->subDays($alertRetentionDays);
 
         $prunedSearches = 0;
         do {
@@ -49,8 +52,23 @@ class PruneAnalyticsLogsCommand extends Command
             $prunedNotFound += $deleted;
         } while ($deleted > 0);
 
-        $this->info("Analytics logs pruned: {$prunedSearches} search logs, {$prunedEvents} site events, {$prunedNotFound} 404 logs.");
+        $prunedAlerts = 0;
+        do {
+            $ids = AnalyticsAlert::query()
+                ->whereIn('status', ['resolved', 'dismissed'])
+                ->where('updated_at', '<', $alertCutoff)
+                ->limit(1000)
+                ->pluck('id');
+            if ($ids->isEmpty()) {
+                break;
+            }
+            $deleted = AnalyticsAlert::query()->whereIn('id', $ids)->delete();
+            $prunedAlerts += $deleted;
+        } while ($deleted > 0);
+
+        $this->info("Analytics logs pruned: {$prunedSearches} search logs, {$prunedEvents} site events, {$prunedNotFound} 404 logs, {$prunedAlerts} alerts.");
 
         return self::SUCCESS;
     }
 }
+

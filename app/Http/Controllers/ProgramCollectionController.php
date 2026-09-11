@@ -37,8 +37,9 @@ class ProgramCollectionController extends Controller
         try {
             $layout = null;
             $previewLayoutId = request()->query('preview_layout_id');
+            $isPreview = filled($previewLayoutId) && auth()->check();
 
-            if (filled($previewLayoutId) && auth()->check()) {
+            if ($isPreview) {
                 $layout = \App\Models\HomepageLayout::query()
                     ->where('id', $previewLayoutId)
                     ->where('page_type', 'program_collection')
@@ -53,24 +54,23 @@ class ProgramCollectionController extends Controller
                     ->first();
             }
 
-            $sections = [];
             if ($layout) {
-                $sections = (filled($previewLayoutId) && auth()->check())
+                $rawSections = $isPreview
                     ? ($layout->draft_sections ?? [])
                     : ($layout->published_sections ?? []);
-            }
 
-            unset($sections['_fixed_settings']);
-            $sections = array_values(array_filter($sections, fn ($s) => is_array($s) && ! empty($s['visible'] ?? true)));
+                unset($rawSections['_fixed_settings']);
+                $sections = array_values(array_filter($rawSections, fn ($s) => is_array($s) && ! empty($s['visible'] ?? true)));
 
-            if ($layout && ! empty($sections)) {
-                return view('program-collections.show_builder', [
-                    'collection' => $collection,
-                    'programs' => $programs,
-                    'settings' => $settings,
-                    'sections' => $sections,
-                    'preview' => filled($previewLayoutId),
-                ]);
+                if ($isPreview || (! empty($sections) && $layout->is_active)) {
+                    return view('program-collections.show_builder', [
+                        'collection' => $collection,
+                        'programs' => $programs,
+                        'settings' => $settings,
+                        'sections' => $sections,
+                        'preview' => $isPreview,
+                    ]);
+                }
             }
         } catch (\Throwable $e) {
             // Graceful fallback to legacy view
@@ -83,3 +83,4 @@ class ProgramCollectionController extends Controller
         ]);
     }
 }
+

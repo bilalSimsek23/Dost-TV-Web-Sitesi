@@ -61,6 +61,54 @@ class VideoCollectionController extends Controller
         // Perform real server-side DB pagination
         $episodes = $filteredQuery->paginate($pageSize)->withQueryString();
 
+        // --- Visual Builder Layout Resolution ---
+        try {
+            $layout = null;
+            $previewLayoutId = request()->query('preview_layout_id');
+            $isPreview = filled($previewLayoutId) && auth()->check();
+
+            if ($isPreview) {
+                $layout = \App\Models\HomepageLayout::query()
+                    ->where('id', $previewLayoutId)
+                    ->where('page_type', 'video_collection')
+                    ->first();
+            }
+
+            if (! $layout) {
+                $layout = \App\Models\HomepageLayout::query()
+                    ->where('page_type', 'video_collection')
+                    ->where('target_id', $collection->id)
+                    ->where('is_active', true)
+                    ->first();
+            }
+
+            if ($layout) {
+                $rawSections = $isPreview
+                    ? ($layout->draft_sections ?? [])
+                    : ($layout->published_sections ?? []);
+
+                unset($rawSections['_fixed_settings']);
+                $sections = array_values(array_filter($rawSections, fn ($s) => is_array($s) && ! empty($s['visible'] ?? true)));
+
+                if ($isPreview || (! empty($sections) && $layout->is_active)) {
+                    return view('video-collections.show_builder', [
+                        'collection' => $collection,
+                        'episodes' => $episodes,
+                        'totalCount' => $totalEpisodesCount,
+                        'settings' => $settings,
+                        'categories' => $categories,
+                        'programs' => $programs,
+                        'selectedCategory' => $selectedCatSlug,
+                        'selectedProgram' => $selectedProgSlug,
+                        'sections' => $sections,
+                        'preview' => $isPreview,
+                    ]);
+                }
+            }
+        } catch (\Throwable $e) {
+            // Graceful fallback to legacy view
+        }
+
         return view('video-collections.show', [
             'collection' => $collection,
             'episodes' => $episodes,
@@ -73,3 +121,4 @@ class VideoCollectionController extends Controller
         ]);
     }
 }
+

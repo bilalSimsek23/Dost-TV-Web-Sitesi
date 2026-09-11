@@ -57,35 +57,83 @@ class HomepageBlockRegistry
     public static function getProgramCollectionBlockTypes(): array
     {
         return [
-            self::BLOCK_COLLECTION_HEADER => 'Koleksiyon Üst Alanı (Header)',
+            self::BLOCK_COLLECTION_HEADER => 'Sayfa Üst Alanı / Koleksiyon Başlığı',
             self::BLOCK_PROGRAM_COLLECTION_GRID => 'Program Koleksiyon Gridi',
             self::BLOCK_CONTENT_SHELF => 'İçerik Rafı (Dinamik)',
+            self::BLOCK_PROGRAM_SHOWCASE => 'Program Vitrini',
+            self::BLOCK_VIDEO_COLLECTION => 'Video Koleksiyonu / Vitrini',
+            self::BLOCK_CATEGORY_SHELF => 'Kategori Rafı',
+            self::BLOCK_TODAY_SCHEDULE => 'Yayın Akışı',
         ];
     }
 
     public static function getVideoCollectionBlockTypes(): array
     {
         return [
-            self::BLOCK_COLLECTION_HEADER => 'Koleksiyon Üst Alanı (Header)',
+            self::BLOCK_COLLECTION_HEADER => 'Sayfa Üst Alanı / Koleksiyon Başlığı',
             self::BLOCK_VIDEO_COLLECTION_GRID => 'Video Koleksiyon Gridi',
             self::BLOCK_CONTENT_SHELF => 'İçerik Rafı (Dinamik)',
+            self::BLOCK_PROGRAM_SHOWCASE => 'Program Vitrini',
+            self::BLOCK_VIDEO_COLLECTION => 'Video Koleksiyonu / Vitrini',
+            self::BLOCK_CATEGORY_SHELF => 'Kategori Rafı',
+            self::BLOCK_TODAY_SCHEDULE => 'Yayın Akışı',
         ];
+    }
+
+
+    public static function getScheduleBlockTypes(): array
+    {
+        return [
+            self::BLOCK_TODAY_SCHEDULE => 'Yayın Akışı',
+            self::BLOCK_LIVE_STREAM => 'Canlı Yayın (TV / Radyo)',
+            self::BLOCK_CONTENT_SHELF => 'İçerik Rafı (Dinamik)',
+            self::BLOCK_BANNER => 'Özel Banner',
+        ];
+    }
+
+    public static function getProgramIndexBlockTypes(): array
+    {
+        return [
+            self::BLOCK_PROGRAM_SHOWCASE => 'Program Vitrini',
+            self::BLOCK_CATEGORY_SHELF => 'Kategori Rafı',
+            self::BLOCK_CONTENT_SHELF => 'İçerik Rafı (Dinamik)',
+            self::BLOCK_BANNER => 'Özel Banner',
+        ];
+    }
+
+    public static function getLiveTvBlockTypes(): array
+    {
+        return [
+            self::BLOCK_LIVE_STREAM => 'Canlı Yayın (TV / Radyo)',
+            self::BLOCK_TODAY_SCHEDULE => 'Yayın Akışı',
+            self::BLOCK_CONTENT_SHELF => 'İçerik Rafı (Dinamik)',
+            self::BLOCK_BANNER => 'Özel Banner',
+        ];
+    }
+
+    public static function getFixedBlocksForPageType(string $pageType = 'home'): array
+    {
+        if ($pageType === 'home') {
+            return ['header', 'hero', 'footer'];
+        }
+
+        return [];
     }
 
     public static function getBlockTypesForPageType(string $pageType = 'home'): array
     {
-        if ($pageType === 'program_detail') {
-            return self::getProgramDetailBlockTypes();
-        }
-        if ($pageType === 'program_collection') {
-            return self::getProgramCollectionBlockTypes();
-        }
-        if ($pageType === 'video_collection') {
-            return self::getVideoCollectionBlockTypes();
-        }
-
-        return self::getBlockTypes();
+        return match ($pageType) {
+            'program_detail' => self::getProgramDetailBlockTypes(),
+            'program_collection' => self::getProgramCollectionBlockTypes(),
+            'video_collection' => self::getVideoCollectionBlockTypes(),
+            'schedule' => self::getScheduleBlockTypes(),
+            'program_index' => self::getProgramIndexBlockTypes(),
+            'live_tv' => self::getLiveTvBlockTypes(),
+            'home' => self::getBlockTypes(),
+            default => self::getBlockTypes(),
+        };
     }
+
 
     public static function getShelfTypes(): array
     {

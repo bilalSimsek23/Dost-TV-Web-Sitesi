@@ -98,10 +98,10 @@ class PageDiscoveryService
         }
 
         // Map layout records to discovered pages
-        $existingLayouts = HomepageLayout::all()->groupBy(fn ($l) => $l->page_type . '_' . ($l->target_id ?? 'null'));
+        $existingLayouts = HomepageLayout::all()->groupBy(fn ($l) => $l->page_type.'_'.($l->target_id ?? 'null'));
 
         return $pages->map(function ($page) use ($existingLayouts) {
-            $groupKey = $page['page_type'] . '_' . ($page['target_id'] ?? 'null');
+            $groupKey = $page['page_type'].'_'.($page['target_id'] ?? 'null');
             $matchingLayouts = $existingLayouts->get($groupKey, collect());
 
             $activeLayout = $matchingLayouts->firstWhere('is_active', true);
@@ -111,7 +111,7 @@ class PageDiscoveryService
             $page['has_layout'] = $matchingLayouts->isNotEmpty();
 
             if (! $page['has_layout']) {
-                $page['status_label'] = 'Henüz Düzenlenmedi';
+                $page['status_label'] = 'Henüz Tasarlanmadı';
                 $page['status_color'] = 'gray';
             } elseif ($latestLayout->is_active) {
                 $page['status_label'] = 'Canlı';
@@ -123,6 +123,211 @@ class PageDiscoveryService
 
             return $page;
         });
+    }
+
+    /**
+     * Get default initial sections for a specific page_type.
+     */
+    public static function getDefaultSectionsForPageType(string $pageType): array
+    {
+        return match ($pageType) {
+            'program_collection' => [
+                [
+                    'uuid' => (string) \Illuminate\Support\Str::uuid(),
+                    'block_type' => 'collection_header',
+                    'visible' => true,
+                    'title' => '',
+                    'show_title' => true,
+                ],
+                [
+                    'uuid' => (string) \Illuminate\Support\Str::uuid(),
+                    'block_type' => 'program_collection_grid',
+                    'visible' => true,
+                    'title' => '',
+                    'show_title' => true,
+                    'desktop_columns' => 4,
+                ],
+            ],
+            'video_collection' => [
+                [
+                    'uuid' => (string) \Illuminate\Support\Str::uuid(),
+                    'block_type' => 'collection_header',
+                    'visible' => true,
+                    'title' => '',
+                    'show_title' => true,
+                ],
+                [
+                    'uuid' => (string) \Illuminate\Support\Str::uuid(),
+                    'block_type' => 'video_collection_grid',
+                    'visible' => true,
+                    'title' => '',
+                    'show_title' => true,
+                    'desktop_columns' => 4,
+                ],
+            ],
+            'program_detail' => [
+                [
+                    'uuid' => (string) \Illuminate\Support\Str::uuid(),
+                    'block_type' => 'program_hero',
+                    'visible' => true,
+                ],
+                [
+                    'uuid' => (string) \Illuminate\Support\Str::uuid(),
+                    'block_type' => 'program_description',
+                    'visible' => true,
+                ],
+                [
+                    'uuid' => (string) \Illuminate\Support\Str::uuid(),
+                    'block_type' => 'episodes_shelf',
+                    'visible' => true,
+                ],
+            ],
+            'schedule' => [
+                [
+                    'uuid' => (string) \Illuminate\Support\Str::uuid(),
+                    'block_type' => 'today_schedule',
+                    'visible' => true,
+                    'title' => 'Bugünün Yayın Akışı',
+                    'show_title' => true,
+                ],
+            ],
+            'program_index' => [
+                [
+                    'uuid' => (string) \Illuminate\Support\Str::uuid(),
+                    'block_type' => 'program_showcase',
+                    'visible' => true,
+                    'title' => 'Tüm Programlarımız',
+                    'show_title' => true,
+                ],
+            ],
+            'live_tv' => [
+                [
+                    'uuid' => (string) \Illuminate\Support\Str::uuid(),
+                    'block_type' => 'live_stream',
+                    'visible' => true,
+                    'title' => 'Canlı Yayın',
+                    'show_title' => true,
+                ],
+            ],
+            default => [],
+        };
+    }
+
+    /**
+     * Ensures every discoverable system and collection page target has at least one layout record.
+     */
+    public static function ensureAllTargetsExist(): void
+    {
+        $discoverable = static::getDiscoverablePages();
+
+        foreach ($discoverable as $pageTarget) {
+            $pageType = $pageTarget['page_type'];
+            $targetId = $pageTarget['target_id'];
+
+            $query = HomepageLayout::query()->where('page_type', $pageType);
+            if ($targetId !== null) {
+                $query->where('target_id', $targetId);
+            } else {
+                $query->whereNull('target_id');
+            }
+
+            if (! $query->exists()) {
+                HomepageLayout::create([
+                    'name' => $pageTarget['name'],
+                    'page_type' => $pageType,
+                    'target_id' => $targetId,
+                    'is_active' => false,
+                    'draft_sections' => static::getDefaultSectionsForPageType($pageType),
+                    'published_sections' => [],
+                    'published_at' => null,
+                ]);
+            }
+        }
+    }
+
+
+    /**
+     * Returns key-value array of target pages for the "+ Yeni Alternatif Düzen" dropdown.
+     */
+    public static function getSelectableTargetOptions(): array
+    {
+        $discoverable = static::getDiscoverablePages();
+        $options = [];
+
+        foreach ($discoverable as $pageTarget) {
+            $key = $pageTarget['page_type'].'|'.($pageTarget['target_id'] ?? '');
+            $typeLabel = match ($pageTarget['page_type']) {
+                'home' => 'Ana Sayfa',
+                'program_detail' => 'Şablon',
+                'program_collection' => 'Program Koleksiyonu',
+                'video_collection' => 'Video Koleksiyonu',
+                default => 'Sistem Sayfası',
+            };
+
+            $options[$key] = "[{$typeLabel}] {$pageTarget['name']} ({$pageTarget['url']})";
+        }
+
+        return $options;
+    }
+
+    /**
+     * Resolve human readable target page title for a layout record.
+     */
+    public static function resolveTargetTitle(HomepageLayout $record): string
+    {
+        $type = $record->page_type ?? 'home';
+        $targetId = $record->target_id;
+
+        if ($type === 'program_collection' && $targetId) {
+            $col = ProgramCollection::find($targetId);
+
+            return $col ? $col->name : "Program Koleksiyonu #{$targetId}";
+        }
+
+        if ($type === 'video_collection' && $targetId) {
+            $col = VideoCollection::find($targetId);
+
+            return $col ? $col->name : "Video Koleksiyonu #{$targetId}";
+        }
+
+        return match ($type) {
+            'home' => 'Ana Sayfa',
+            'program_detail' => 'Program Detay Şablonu',
+            'program_index' => 'Programlar Sayfası',
+            'schedule' => 'Yayın Akışı Sayfası',
+            'live_tv' => 'Canlı TV Sayfası',
+            default => ucfirst($type),
+        };
+    }
+
+    /**
+     * Resolve public URL path for a layout record.
+     */
+    public static function resolveTargetUrl(HomepageLayout $record): string
+    {
+        $type = $record->page_type ?? 'home';
+        $targetId = $record->target_id;
+
+        if ($type === 'program_collection' && $targetId) {
+            $col = ProgramCollection::find($targetId);
+
+            return $col ? "/program-koleksiyonlari/{$col->slug}" : "/program-koleksiyonlari/#{$targetId}";
+        }
+
+        if ($type === 'video_collection' && $targetId) {
+            $col = VideoCollection::find($targetId);
+
+            return $col ? "/koleksiyonlar/{$col->slug}" : "/koleksiyonlar/#{$targetId}";
+        }
+
+        return match ($type) {
+            'home' => '/',
+            'program_detail' => '/programlar/{slug}',
+            'program_index' => '/programlar',
+            'schedule' => '/yayin-akisi',
+            'live_tv' => '/canli-tv',
+            default => '/',
+        };
     }
 
     /**
@@ -156,12 +361,12 @@ class PageDiscoveryService
                 $name = $col ? $col->name : "Video Koleksiyonu {$targetId}";
             } else {
                 $name = match ($pageType) {
-                    'home' => 'Ana Sayfa Düzeni',
+                    'home' => 'Ana Sayfa',
                     'program_detail' => 'Program Detay Şablonu',
-                    'program_index' => 'Programlar Sayfası Düzeni',
-                    'schedule' => 'Yayın Akışı Düzeni',
-                    'live_tv' => 'Canlı TV Düzeni',
-                    default => ucfirst($pageType) . ' Düzeni',
+                    'program_index' => 'Programlar Sayfası',
+                    'schedule' => 'Yayın Akışı Sayfası',
+                    'live_tv' => 'Canlı TV Sayfası',
+                    default => ucfirst($pageType),
                 };
             }
         }
@@ -171,8 +376,9 @@ class PageDiscoveryService
             'page_type' => $pageType,
             'target_id' => $targetId,
             'is_active' => false,
-            'draft_sections' => [],
+            'draft_sections' => static::getDefaultSectionsForPageType($pageType),
             'published_sections' => [],
         ]);
     }
 }
+

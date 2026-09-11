@@ -2,12 +2,12 @@
 
 namespace App\Filament\Resources\SiteLayout\HomepageLayoutResource\Tables;
 
+use App\Filament\Resources\SiteLayout\HomepageLayoutResource\HomepageLayoutResource;
 use App\Models\HomepageLayout;
+use App\Services\Page\PageDiscoveryService;
 use Filament\Actions\Action;
 use Filament\Actions\DeleteAction;
-use Filament\Actions\EditAction;
 use Filament\Notifications\Notification;
-use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 
@@ -17,24 +17,24 @@ class HomepageLayoutsTable
     {
         return $table
             ->columns([
-                TextColumn::make('name')
-                    ->label('Düzen Adı')
-                    ->searchable()
-                    ->sortable()
-                    ->weight('bold'),
+                TextColumn::make('target_page')
+                    ->label('SAYFA')
+                    ->getStateUsing(fn (HomepageLayout $record): string => PageDiscoveryService::resolveTargetTitle($record))
+                    ->weight('bold')
+                    ->searchable(false),
 
                 TextColumn::make('page_type')
-                    ->label('Sayfa Türü')
+                    ->label('TÜR')
                     ->badge()
                     ->formatStateUsing(fn (?string $state): string => match ($state) {
                         'home' => 'Ana Sayfa',
-                        'program_detail' => 'Program Detay',
-                        'program_index' => 'Programlar',
-                        'schedule' => 'Yayın Akışı',
-                        'live_tv' => 'Canlı TV',
+                        'program_detail' => 'Şablon',
+                        'program_index' => 'Sistem',
+                        'schedule' => 'Sistem',
+                        'live_tv' => 'Sistem',
                         'program_collection' => 'Program Koleksiyonu',
                         'video_collection' => 'Video Koleksiyonu',
-                        default => $state ?? 'Ana Sayfa',
+                        default => 'Sistem',
                     })
                     ->color(fn (?string $state): string => match ($state) {
                         'home' => 'primary',
@@ -44,51 +44,52 @@ class HomepageLayoutsTable
                     }),
 
                 TextColumn::make('target_url')
-                    ->label('Hedef / URL')
-                    ->getStateUsing(function (HomepageLayout $record): string {
-                        $type = $record->page_type ?? 'home';
-                        if ($type === 'program_collection' && $record->target_id) {
-                            $col = \App\Models\ProgramCollection::find($record->target_id);
-                            return $col ? "/program-koleksiyonlari/{$col->slug}" : "Koleksiyon #{$record->target_id}";
-                        }
-                        if ($type === 'video_collection' && $record->target_id) {
-                            $col = \App\Models\VideoCollection::find($record->target_id);
-                            return $col ? "/koleksiyonlar/{$col->slug}" : "Koleksiyon #{$record->target_id}";
-                        }
-                        return match ($type) {
-                            'home' => '/',
-                            'program_detail' => '/programlar/{slug}',
-                            'program_index' => '/programlar',
-                            'schedule' => '/yayin-akisi',
-                            'live_tv' => '/canli-tv',
-                            default => '/',
-                        };
-                    })
+                    ->label('URL')
+                    ->getStateUsing(fn (HomepageLayout $record): string => PageDiscoveryService::resolveTargetUrl($record))
                     ->badge()
                     ->color('gray'),
 
-                IconColumn::make('is_active')
-                    ->label('Canlı Durum')
-                    ->boolean()
-                    ->trueIcon('heroicon-o-check-circle')
-                    ->falseIcon('heroicon-o-x-circle')
-                    ->trueColor('success')
-                    ->falseColor('gray'),
+                TextColumn::make('status')
+                    ->label('DURUM')
+                    ->badge()
+                    ->getStateUsing(function (HomepageLayout $record): string {
+                        if ($record->is_active) {
+                            return 'Canlı';
+                        }
+                        if ($record->published_at !== null) {
+                            return 'Taslak / Pasif';
+                        }
 
-                TextColumn::make('published_at')
-                    ->label('Son Yayınlanma')
-                    ->dateTime('d.m.Y H:i')
-                    ->placeholder('Henüz Yayınlanmadı')
+                        return 'Henüz Tasarlanmadı';
+                    })
+                    ->color(function (HomepageLayout $record): string {
+                        if ($record->is_active) {
+                            return 'success';
+                        }
+                        if ($record->published_at !== null) {
+                            return 'warning';
+                        }
+
+                        return 'gray';
+                    }),
+
+                TextColumn::make('name')
+                    ->label('DÜZEN ADI')
+                    ->searchable()
                     ->sortable(),
 
-                TextColumn::make('updated_at')
-                    ->label('Son Güncelleme')
+                TextColumn::make('published_at')
+                    ->label('SON YAYINLAMA')
                     ->dateTime('d.m.Y H:i')
-                    ->sortable()
-                    ->toggleable(isToggledHiddenByDefault: true),
+                    ->placeholder('—')
+                    ->sortable(),
             ])
             ->recordActions([
-                EditAction::make()->label('Düzenle'),
+                Action::make('builder')
+                    ->label(fn (HomepageLayout $record): string => ($record->published_at === null && ! $record->is_active) ? "Visual Builder'da Tasarla" : "Visual Builder'da Düzenle")
+                    ->icon(fn (HomepageLayout $record): string => ($record->published_at === null && ! $record->is_active) ? 'heroicon-o-paint-brush' : 'heroicon-o-pencil-square')
+                    ->color('primary')
+                    ->url(fn (HomepageLayout $record): string => HomepageLayoutResource::getUrl('edit', ['record' => $record])),
 
                 Action::make('duplicate')
                     ->label('Düzeni Kopyala')
@@ -106,30 +107,14 @@ class HomepageLayoutsTable
                             ->send();
                     }),
 
-                Action::make('publish')
-                    ->label('Yayınla')
-                    ->icon('heroicon-o-arrow-path')
-                    ->color('warning')
-                    ->requiresConfirmation()
-                    ->modalHeading('Düzeni Yayınla')
-                    ->modalDescription('Taslakta yaptığınız tüm blok değişiklikleri canlı yayındaki yayınlanmış sürüme kopyalanacak.')
-                    ->action(function (HomepageLayout $record) {
-                        $record->publish(false);
-                        Notification::make()
-                            ->title('Düzen Yayınlandı')
-                            ->body('Taslak değişiklikleri canlı sürüme başarıyla aktarıldı.')
-                            ->success()
-                            ->send();
-                    }),
-
                 Action::make('activate')
-                    ->label('Canlı Yap (Aktif Et)')
+                    ->label('Canlı Yap')
                     ->icon('heroicon-o-bolt')
                     ->color('success')
                     ->requiresConfirmation()
                     ->modalHeading('Bu Düzeni Canlı Yap')
                     ->modalDescription('Bu düzen aktif edildiğinde, aynı sayfa türündeki canlı düzen otomatik olarak pasife alınacak.')
-                    ->visible(fn (HomepageLayout $record) => ! $record->is_active)
+                    ->visible(fn (HomepageLayout $record) => ! $record->is_active && $record->published_at !== null)
                     ->action(function (HomepageLayout $record) {
                         $record->publish(true);
                         Notification::make()
@@ -147,7 +132,7 @@ class HomepageLayoutsTable
                         if ($record->is_active) {
                             Notification::make()
                                 ->title('Aktif Düzen Silinemez')
-                                ->body('Canlı yayında olan aktif düzen doğrudan silinemez. Lütfen önce başka bir düzeni canlı yapın (aktif edin).')
+                                ->body('Canlı yayında olan aktif düzen doğrudan silinemez. Lütfen önce başka bir düzeni canlı yapın.')
                                 ->danger()
                                 ->send();
 
@@ -159,3 +144,4 @@ class HomepageLayoutsTable
             ->defaultPaginationPageOption(25);
     }
 }
+

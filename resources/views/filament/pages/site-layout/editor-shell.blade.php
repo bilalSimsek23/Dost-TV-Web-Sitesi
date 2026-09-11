@@ -1,6 +1,7 @@
 <div>
     @php
         $blockTypes = \App\Services\Home\HomepageBlockRegistry::getBlockTypesForPageType($record->page_type ?? 'home');
+        $fixedBlocks = \App\Services\Home\HomepageBlockRegistry::getFixedBlocksForPageType($record->page_type ?? 'home');
         $displayVariants = \App\Services\Home\HomepageBlockRegistry::getDisplayVariants();
         $desktopColumns = \App\Services\Home\HomepageBlockRegistry::getDesktopColumns();
         $paddingYOptions = \App\Services\Home\HomepageBlockRegistry::getPaddingYOptions();
@@ -293,73 +294,52 @@
          }"
          x-on:preview-updated.window="refreshPreview()">
 
-        {{-- 56px Header Toolbar --}}
+        {{-- Top Elementor Bar --}}
         <header class="dost-editor-toolbar">
             <div class="dost-editor-toolbar-left">
-                <a href="/admin/site-layout/homepage-layout-resource/homepage-layouts"
-                   class="dost-btn dost-btn-slate"
-                   title="Yönetim Paneline Dön">
+                <a href="{{ \App\Filament\Resources\SiteLayout\HomepageLayoutResource\HomepageLayoutResource::getUrl('index') }}"
+                   class="dost-btn dost-btn-slate">
                     <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" />
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
                     </svg>
-                    <span>&larr; Yönetim Paneline Dön</span>
+                    <span>Sayfa Düzenleri</span>
                 </a>
 
-                <div style="display: flex; align-items: center; gap: 8px; margin-left: 8px;">
-                    <strong style="font-size: 14px; font-weight: 700; color: #ffffff;">{{ $record->name }}</strong>
-
-                    @if (($record->page_type ?? 'home') === 'program_detail')
-                        <span class="dost-badge" style="background: rgba(14, 165, 233, 0.2); color: #38bdf8; border: 1px solid rgba(14, 165, 233, 0.4); padding: 3px 10px; font-size: 11px;">
-                            Program Detay
-                        </span>
-                    @else
-                        <span class="dost-badge" style="background: rgba(225, 29, 72, 0.2); color: #fb7185; border: 1px solid rgba(225, 29, 72, 0.4); padding: 3px 10px; font-size: 11px;">
-                            Ana Sayfa
-                        </span>
-                    @endif
-
-                    @if ($record->is_active)
-                        <span class="dost-badge dost-badge-emerald">
-                            {{ ($record->page_type ?? 'home') === 'program_detail' ? 'CANLI PROGRAM DETAY' : 'CANLI ANA SAYFA' }}
-                        </span>
-                    @else
-                        <span class="dost-badge dost-badge-slate">TASLAK</span>
-                    @endif
-
-                    @if ($this->hasUnpublishedChanges)
-                        <span class="dost-badge" style="background: rgba(217, 119, 6, 0.2); color: #fbbf24; border: 1px solid rgba(217, 119, 6, 0.4); padding: 3px 10px; font-size: 11px;">
-                            ● Yayınlanmamış değişiklikler var
-                        </span>
-                    @else
-                        <span class="dost-badge" style="background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.3); padding: 3px 10px; font-size: 11px;">
-                            ✓ Site güncel
-                        </span>
-                    @endif
-                </div>
-
-                @if (($record->page_type ?? 'home') === 'program_detail')
-                    <div style="display: flex; align-items: center; gap: 6px; margin-left: 12px; background: rgba(15, 23, 42, 0.8); border: 1px solid rgba(255, 255, 255, 0.12); padding: 4px 10px; border-radius: 8px;">
-                        <span style="font-size: 11px; color: #94a3b8; font-weight: 600;">Önizleme Programı:</span>
-                        <select wire:model.live="previewProgramId" class="dost-select" style="width: auto; padding: 3px 8px; font-size: 12px;">
-                            @foreach (\App\Models\Program::query()->where('is_active', true)->where('show_on_public', true)->orderBy('name')->get() as $progItem)
-                                <option value="{{ $progItem->id }}">{{ $progItem->name }}</option>
-                            @endforeach
-                        </select>
+                <div style="display: flex; flex-direction: column;">
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <span style="font-weight: 700; font-size: 14px; color: #ffffff;">{{ $record->name ?: 'Sayfa Düzeni' }}</span>
+                        @if ($record->is_active)
+                            <span class="dost-badge dost-badge-emerald">CANLI SAYFA</span>
+                        @else
+                            <span class="dost-badge dost-badge-slate">TASLAK VARYANT</span>
+                        @endif
                     </div>
-                @endif
-
-                <select onchange="window.location.href = '/admin/site-layout/homepage-layout-resource/homepage-layouts/' + this.value + '/edit'"
-                        class="dost-select"
-                        style="width: auto; margin-left: 8px;">
-                    @foreach (\App\Models\HomepageLayout::query()->where('page_type', $record->page_type ?? 'home')->orderBy('name')->get() as $layoutItem)
-                        <option value="{{ $layoutItem->id }}" @selected($layoutItem->id === $record->id)>
-                            {{ $layoutItem->name }} {{ $layoutItem->is_active ? '(CANLI)' : '' }}
-                        </option>
-                    @endforeach
-                </select>
+                    <span style="font-size: 11px; color: #94a3b8;">
+                        Düzenlenen Sayfa: {{ \App\Services\Page\PageDiscoveryService::resolveTargetTitle($record) }} ({{ \App\Services\Page\PageDiscoveryService::resolveTargetUrl($record) }})
+                    </span>
+                </div>
             </div>
 
-            <div class="dost-editor-toolbar-right">
+            <div class="dost-editor-toolbar-right" x-data="{ device: 'desktop' }" x-init="$watch('device', val => $dispatch('device-changed', val))">
+                {{-- Responsive View Mode Switcher --}}
+                <div style="display: flex; align-items: center; background: rgba(0,0,0,0.3); border-radius: 6px; padding: 2px; border: 1px solid rgba(255,255,255,0.08); margin-right: 12px;">
+                    <button type="button" @click="device = 'desktop'" :class="{ 'dost-btn-slate': device === 'desktop' }" class="dost-btn" style="padding: 4px 8px; font-size: 11px;" title="Masaüstü Görünüm">
+                        🖥️ Masaüstü
+                    </button>
+                    <button type="button" @click="device = 'tablet'" :class="{ 'dost-btn-slate': device === 'tablet' }" class="dost-btn" style="padding: 4px 8px; font-size: 11px;" title="Tablet Görünüm">
+                        📱 Tablet
+                    </button>
+                    <button type="button" @click="device = 'mobile'" :class="{ 'dost-btn-slate': device === 'mobile' }" class="dost-btn" style="padding: 4px 8px; font-size: 11px;" title="Mobil Görünüm">
+                        📲 Mobil
+                    </button>
+                </div>
+
+                @if ($this->hasUnpublishedChanges)
+                    <span style="font-size: 11px; color: #fbbf24; display: flex; align-items: center; gap: 4px; background: rgba(251, 191, 36, 0.1); padding: 4px 8px; border-radius: 4px; border: 1px solid rgba(251, 191, 36, 0.2);">
+                        ⚠️ Yayınlanmamış Değişiklikler Var
+                    </span>
+                @endif
+
                 <a href="{{ route('admin.site-layout.preview-frame', $record) }}"
                    target="_blank"
                    class="dost-btn dost-btn-slate">
@@ -409,8 +389,20 @@
                 @if ($contextMode === 'list')
                     {{-- Context A: Overview & Block List --}}
                     <div style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 10px;">
+                        @php
+                            $sidebarTitle = match ($record->page_type ?? 'home') {
+                                'home' => 'Ana Sayfa Blokları',
+                                'program_collection' => 'Program Koleksiyonu Blokları',
+                                'video_collection' => 'Video Koleksiyonu Blokları',
+                                'program_detail' => 'Program Detay Blokları',
+                                'schedule' => 'Yayın Akışı Blokları',
+                                'program_index' => 'Programlar Sayfası Blokları',
+                                'live_tv' => 'Canlı TV Blokları',
+                                default => 'Sayfa Blokları',
+                            };
+                        @endphp
                         <h3 style="font-size: 12px; font-weight: 700; text-transform: uppercase; color: #94a3b8; margin: 0;">
-                            Ana Sayfa Blokları
+                            {{ $sidebarTitle }}
                         </h3>
                         <span class="dost-badge dost-badge-slate">
                             {{ count($draftSections) }} Bölüm
@@ -457,33 +449,37 @@
                              }
                          }">
 
-                        {{-- Locked Pinned Area 1: Header --}}
-                        <div class="dost-card" style="padding: 8px 10px; display: flex; align-items: center; justify-content: space-between; border-left: 3px solid #eab308; background: #0f1219; cursor: pointer;" wire:click="selectFixedArea('header')">
-                            <div style="display: flex; align-items: center; gap: 8px;">
-                                <span style="font-size: 11px;">🔒</span>
-                                <div style="display: flex; flex-direction: column;">
-                                    <span style="font-size: 11px; font-weight: 700; color: #cbd5e1;">Üst Alan (Header)</span>
-                                    <span style="font-size: 9px; color: #64748b;">Sabit Bölüm • Tasarım Ayarları</span>
+                        {{-- Locked Pinned Area 1: Header (Homepage Only) --}}
+                        @if (in_array('header', $fixedBlocks))
+                            <div class="dost-card" style="padding: 8px 10px; display: flex; align-items: center; justify-content: space-between; border-left: 3px solid #eab308; background: #0f1219; cursor: pointer;" wire:click="selectFixedArea('header')">
+                                <div style="display: flex; align-items: center; gap: 8px;">
+                                    <span style="font-size: 11px;">🔒</span>
+                                    <div style="display: flex; flex-direction: column;">
+                                        <span style="font-size: 11px; font-weight: 700; color: #cbd5e1;">Üst Alan (Header)</span>
+                                        <span style="font-size: 9px; color: #64748b;">Sabit Bölüm • Tasarım Ayarları</span>
+                                    </div>
                                 </div>
+                                <button type="button" wire:click="selectFixedArea('header')" class="dost-btn dost-btn-slate" style="padding: 3px 8px; font-size: 10px;">
+                                    Düzenle
+                                </button>
                             </div>
-                            <button type="button" wire:click="selectFixedArea('header')" class="dost-btn dost-btn-slate" style="padding: 3px 8px; font-size: 10px;">
-                                Düzenle
-                            </button>
-                        </div>
+                        @endif
 
-                        {{-- Locked Pinned Area 2: Hero Banner --}}
-                        <div class="dost-card" style="padding: 8px 10px; display: flex; align-items: center; justify-content: space-between; border-left: 3px solid #eab308; background: #0f1219; margin-bottom: 4px; cursor: pointer;" wire:click="selectFixedArea('hero')">
-                            <div style="display: flex; align-items: center; gap: 8px;">
-                                <span style="font-size: 11px;">🔒</span>
-                                <div style="display: flex; flex-direction: column;">
-                                    <span style="font-size: 11px; font-weight: 700; color: #cbd5e1;">Manşet (Hero Banner)</span>
-                                    <span style="font-size: 9px; color: #64748b;">Sabit Bölüm • Tasarım Ayarları</span>
+                        {{-- Locked Pinned Area 2: Hero Banner (Homepage Only) --}}
+                        @if (in_array('hero', $fixedBlocks))
+                            <div class="dost-card" style="padding: 8px 10px; display: flex; align-items: center; justify-content: space-between; border-left: 3px solid #eab308; background: #0f1219; margin-bottom: 4px; cursor: pointer;" wire:click="selectFixedArea('hero')">
+                                <div style="display: flex; align-items: center; gap: 8px;">
+                                    <span style="font-size: 11px;">🔒</span>
+                                    <div style="display: flex; flex-direction: column;">
+                                        <span style="font-size: 11px; font-weight: 700; color: #cbd5e1;">Manşet (Hero Banner)</span>
+                                        <span style="font-size: 9px; color: #64748b;">Sabit Bölüm • Tasarım Ayarları</span>
+                                    </div>
                                 </div>
+                                <button type="button" wire:click="selectFixedArea('hero')" class="dost-btn dost-btn-slate" style="padding: 3px 8px; font-size: 10px;">
+                                    Düzenle
+                                </button>
                             </div>
-                            <button type="button" wire:click="selectFixedArea('hero')" class="dost-btn dost-btn-slate" style="padding: 3px 8px; font-size: 10px;">
-                                Düzenle
-                            </button>
-                        </div>
+                        @endif
 
                         {{-- Reorderable Dynamic Blocks --}}
                         @forelse ($draftSections as $index => $section)
@@ -597,19 +593,21 @@
                             </div>
                         @endforelse
 
-                        {{-- Locked Pinned Area 3: Footer --}}
-                        <div class="dost-card" style="padding: 8px 10px; display: flex; align-items: center; justify-content: space-between; border-left: 3px solid #eab308; background: #0f1219; margin-top: 4px; cursor: pointer;" wire:click="selectFixedArea('footer')">
-                            <div style="display: flex; align-items: center; gap: 8px;">
-                                <span style="font-size: 11px;">🔒</span>
-                                <div style="display: flex; flex-direction: column;">
-                                    <span style="font-size: 11px; font-weight: 700; color: #cbd5e1;">Alt Bilgi & İletişim (Footer)</span>
-                                    <span style="font-size: 9px; color: #64748b;">Sabit Bölüm • Tasarım Ayarları</span>
+                        {{-- Locked Pinned Area 3: Footer (Homepage Only) --}}
+                        @if (in_array('footer', $fixedBlocks))
+                            <div class="dost-card" style="padding: 8px 10px; display: flex; align-items: center; justify-content: space-between; border-left: 3px solid #eab308; background: #0f1219; margin-top: 4px; cursor: pointer;" wire:click="selectFixedArea('footer')">
+                                <div style="display: flex; align-items: center; gap: 8px;">
+                                    <span style="font-size: 11px;">🔒</span>
+                                    <div style="display: flex; flex-direction: column;">
+                                        <span style="font-size: 11px; font-weight: 700; color: #cbd5e1;">Alt Bilgi & İletişim (Footer)</span>
+                                        <span style="font-size: 9px; color: #64748b;">Sabit Bölüm • Tasarım Ayarları</span>
+                                    </div>
                                 </div>
+                                <button type="button" wire:click="selectFixedArea('footer')" class="dost-btn dost-btn-slate" style="padding: 3px 8px; font-size: 10px;">
+                                    Düzenle
+                                </button>
                             </div>
-                            <button type="button" wire:click="selectFixedArea('footer')" class="dost-btn dost-btn-slate" style="padding: 3px 8px; font-size: 10px;">
-                                Düzenle
-                            </button>
-                        </div>
+                        @endif
                     </div>
 
                 @elseif (in_array($contextMode, ['edit', 'block']) && $this->selectedBlock)

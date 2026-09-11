@@ -2,20 +2,23 @@
 
 namespace App\Jobs;
 
-use App\Services\Analytics\Ga4DataFetchService;
+use App\Services\Analytics\MetaAdsDataFetchService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 
-class SyncGa4MetricsJob implements ShouldQueue
+class SyncMetaAdsMetricsJob implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
-    public function handle(Ga4DataFetchService $ga4Service): void
+    /**
+     * Execute the job.
+     */
+    public function handle(MetaAdsDataFetchService $service): void
     {
-        $ga4Service->syncMetrics();
+        $service->syncMetrics();
         \App\Services\Analytics\AnalyticsInsightService::clearCache();
     }
 }
