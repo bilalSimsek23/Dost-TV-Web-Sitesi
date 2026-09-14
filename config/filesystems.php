@@ -38,14 +38,34 @@ return [
             'report' => false,
         ],
 
-        'public' => [
-            'driver' => 'local',
-            'root' => storage_path('app/public'),
-            'url' => rtrim(env('APP_URL', 'http://localhost'), '/').'/storage',
-            'visibility' => 'public',
+        // The app calls Storage::disk('public') everywhere for user uploads.
+        // Laravel Cloud's compute is ephemeral, so in production this disk is
+        // backed by the attached Laravel Cloud Object Storage bucket (S3-compatible,
+        // powered by Cloudflare R2) instead of the local filesystem. Laravel Cloud
+        // injects the AWS_* credentials automatically once a bucket is attached;
+        // set PUBLIC_DISK_DRIVER=s3 as a custom env var to switch this disk over
+        // (Cloud only injects credentials, it does not rewrite this config file).
+        'public' => array_filter([
+            'driver' => env('PUBLIC_DISK_DRIVER', 'local'),
+            // A local filesystem path here would be wrong for the s3 driver (it
+            // would prefix every object key with this absolute path and break
+            // every existing "programs/xxx.png"-style path already in the DB),
+            // so only set it for the local driver.
+            'root' => env('PUBLIC_DISK_DRIVER', 'local') === 'local' ? storage_path('app/public') : null,
+            'url' => env('AWS_URL', rtrim(env('APP_URL', 'http://localhost'), '/').'/storage'),
+            // Cloudflare R2 (what Laravel Cloud Object Storage runs on) manages
+            // visibility at the bucket level and rejects per-object ACL requests
+            // with a "NotImplemented" error, so this must only be set for local.
+            'visibility' => env('PUBLIC_DISK_DRIVER', 'local') === 'local' ? 'public' : null,
             'throw' => false,
             'report' => false,
-        ],
+            'key' => env('AWS_ACCESS_KEY_ID'),
+            'secret' => env('AWS_SECRET_ACCESS_KEY'),
+            'region' => env('AWS_DEFAULT_REGION'),
+            'bucket' => env('AWS_BUCKET'),
+            'endpoint' => env('AWS_ENDPOINT'),
+            'use_path_style_endpoint' => env('AWS_USE_PATH_STYLE_ENDPOINT', false),
+        ], fn ($value) => $value !== null),
 
         's3' => [
             'driver' => 's3',

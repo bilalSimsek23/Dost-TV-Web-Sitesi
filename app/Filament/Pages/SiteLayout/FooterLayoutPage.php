@@ -110,7 +110,6 @@ class FooterLayoutPage extends Page implements HasForms, HasActions
                                                 ->image()
                                                 ->disk('public')
                                                 ->directory('recommended-sites')
-                                                ->visibility('public')
                                                 ->avatar(),
 
                                             TextInput::make('url')

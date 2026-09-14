@@ -66,7 +66,6 @@ class AnnouncementForm
                                     ->image()
                                     ->disk('public')
                                     ->directory('announcements')
-                                    ->visibility('public')
                                     ->acceptedFileTypes([
                                         'image/jpeg',
                                         'image/png',

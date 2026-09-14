@@ -65,7 +65,6 @@ class FontFamilyForm
                     ->label('Font Dosyası')
                     ->disk('public')
                     ->directory('fonts')
-                    ->visibility('public')
                     ->acceptedFileTypes(['font/woff', 'font/woff2', 'application/font-woff', 'application/font-woff2', 'application/octet-stream'])
                     ->rules(['extensions:woff,woff2'])
                     ->maxSize(5120)
