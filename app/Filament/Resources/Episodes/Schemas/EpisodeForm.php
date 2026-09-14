@@ -14,6 +14,7 @@ use Filament\Schemas\Components\Grid;
 use Filament\Schemas\Components\Tabs;
 use Filament\Schemas\Components\Tabs\Tab;
 use Filament\Schemas\Schema;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\HtmlString;
 use Illuminate\Support\Str;
 
@@ -143,7 +144,7 @@ class EpisodeForm
                                         }
 
                                         if ($record->video_source === 'upload' && filled($record->video_path)) {
-                                            $videoUrl = asset('storage/' . $record->video_path);
+                                            $videoUrl = Storage::disk('public')->url($record->video_path);
                                             return new HtmlString("
                                                 <div class='max-w-lg'>
                                                     <video controls class='w-full rounded-lg border border-gray-800'>

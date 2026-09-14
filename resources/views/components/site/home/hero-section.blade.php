@@ -76,7 +76,7 @@
                     if ($rawImage) {
                         $imageUrl = str_starts_with($rawImage, 'http')
                             ? $rawImage
-                            : asset('storage/' . $rawImage);
+                            : \Illuminate\Support\Facades\Storage::disk('public')->url($rawImage);
                     }
 
                     $rawMobileImage = $program->mobile_hero_image;
@@ -84,7 +84,7 @@
                     if ($rawMobileImage) {
                         $mobileImageUrl = str_starts_with($rawMobileImage, 'http')
                             ? $rawMobileImage
-                            : asset('storage/' . $rawMobileImage);
+                            : \Illuminate\Support\Facades\Storage::disk('public')->url($rawMobileImage);
                     }
                     $description = $program->hero_text;
                 @endphp

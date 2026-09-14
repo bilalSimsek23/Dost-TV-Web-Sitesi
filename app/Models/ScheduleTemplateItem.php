@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Facades\Storage;
 
 class ScheduleTemplateItem extends Model
 {
@@ -64,15 +65,15 @@ class ScheduleTemplateItem extends Model
     public function getEffectiveImageAttribute(): string
     {
         if (filled($this->image)) {
-            return asset('storage/' . $this->image);
+            return Storage::disk('public')->url($this->image);
         }
 
         if ($this->episode && filled($this->episode->cover_image ?? null)) {
-            return $this->episode->cover_image;
+            return Storage::disk('public')->url($this->episode->cover_image);
         }
 
         if ($this->program && filled($this->program->cover_image ?? null)) {
-            return $this->program->cover_image;
+            return Storage::disk('public')->url($this->program->cover_image);
         }
 
         return 'https://dosttv.com/wp-content/uploads/2022/02/dost_logo.png';

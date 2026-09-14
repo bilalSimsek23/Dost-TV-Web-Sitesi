@@ -1,6 +1,6 @@
 @php
     $logoUrl = filled($logo)
-        ? ((str_starts_with($logo, 'http://') || str_starts_with($logo, 'https://')) ? $logo : asset('storage/' . $logo))
+        ? ((str_starts_with($logo, 'http://') || str_starts_with($logo, 'https://')) ? $logo : \Illuminate\Support\Facades\Storage::disk('public')->url($logo))
         : null;
 @endphp
 

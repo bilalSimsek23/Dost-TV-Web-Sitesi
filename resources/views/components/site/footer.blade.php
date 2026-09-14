@@ -129,8 +129,8 @@
                                         $logoUrl = $siteLogo;
                                     } else {
                                         $cleanPath = ltrim(preg_replace('/^\/?storage\//', '', $siteLogo), '/');
-                                        if (\Illuminate\Support\Facades\Storage::disk('public')->exists($cleanPath) || file_exists(public_path('storage/' . $cleanPath))) {
-                                            $logoUrl = asset('storage/' . $cleanPath);
+                                        if (\Illuminate\Support\Facades\Storage::disk('public')->exists($cleanPath)) {
+                                            $logoUrl = \Illuminate\Support\Facades\Storage::disk('public')->url($cleanPath);
                                         }
                                     }
                                 }

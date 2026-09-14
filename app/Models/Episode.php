@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Support\Facades\Storage;
 
 class Episode extends Model
 {
@@ -137,7 +138,7 @@ class Episode extends Model
                 return $this->thumbnail;
             }
 
-            return asset('storage/' . $this->thumbnail);
+            return Storage::disk('public')->url($this->thumbnail);
         }
 
         if ($this->video_source === 'youtube' && filled($this->youtube_url)) {

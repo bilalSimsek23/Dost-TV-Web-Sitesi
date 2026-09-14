@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Support\SiteCache;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Storage;
 
 class YoutubeChannel extends Model
 {
@@ -41,7 +42,7 @@ class YoutubeChannel extends Model
             return $this->logo;
         }
 
-        return asset('storage/' . $this->logo);
+        return Storage::disk('public')->url($this->logo);
     }
 
     protected static function booted(): void

@@ -13,7 +13,7 @@
             : null;
 
         $initialVideoSrc = (!$initialSrc && $featured?->video_source === 'upload' && filled($featured?->video_path))
-            ? asset('storage/' . $featured->video_path)
+            ? \Illuminate\Support\Facades\Storage::disk('public')->url($featured->video_path)
             : null;
 
         // Fallback to program trailer embed URL if no public video exists
@@ -125,7 +125,7 @@
                                 class="episode-select group text-left flex flex-col cursor-pointer p-1.5 rounded-xl transition duration-200 {{ $isFeaturedActive ? 'bg-rose-950/40 ring-2 ring-rose-500 shadow-lg shadow-rose-950/50' : '' }}"
                                 title="{{ $episode->title }}"
                                 data-type="{{ $episode->video_source === 'youtube' ? 'iframe' : 'video' }}"
-                                data-src="{{ $episode->video_source === 'youtube' ? $episode->youtube_embed_url : ($episode->video_path ? asset('storage/' . $episode->video_path) : '') }}">
+                                data-src="{{ $episode->video_source === 'youtube' ? $episode->youtube_embed_url : ($episode->video_path ? \Illuminate\Support\Facades\Storage::disk('public')->url($episode->video_path) : '') }}">
                             <div class="aspect-video w-full overflow-hidden rounded-xl bg-slate-900 ring-1 {{ $isFeaturedActive ? 'ring-rose-500' : 'ring-white/10' }} relative group-hover:ring-rose-500/50 transition duration-200">
                                 @if ($episode->thumbnail_url)
                                     <img src="{{ $episode->thumbnail_url }}" alt="{{ $episodeLabel }}"

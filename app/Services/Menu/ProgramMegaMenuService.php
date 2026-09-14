@@ -7,6 +7,7 @@ use App\Models\Program;
 use App\Support\SiteCache;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Storage;
 
 class ProgramMegaMenuService
 {
@@ -89,7 +90,7 @@ class ProgramMegaMenuService
                     'id' => $p->id,
                     'title' => $p->name ?? $p->title,
                     'slug' => $p->slug,
-                    'cover_image' => $p->cover_image ? asset('storage/' . $p->cover_image) : null,
+                    'cover_image' => $p->cover_image ? Storage::disk('public')->url($p->cover_image) : null,
                     'url' => route('programs.show', $p),
                 ])->all();
 

@@ -18,7 +18,7 @@
         if (str_starts_with($thumbnail, 'http')) {
             $thumbnailUrl = $thumbnail;
         } else {
-            $thumbnailUrl = asset('storage/' . $thumbnail);
+            $thumbnailUrl = \Illuminate\Support\Facades\Storage::disk('public')->url($thumbnail);
         }
     }
 

@@ -62,9 +62,9 @@
     $ogImage = trim(View::yieldContent('og_image'));
     if (empty($ogImage)) {
         if (!empty($siteSettings->default_og_image)) {
-            $ogImage = asset('storage/' . $siteSettings->default_og_image);
+            $ogImage = \Illuminate\Support\Facades\Storage::disk('public')->url($siteSettings->default_og_image);
         } elseif (!empty($siteSettings->logo)) {
-            $ogImage = asset('storage/' . $siteSettings->logo);
+            $ogImage = \Illuminate\Support\Facades\Storage::disk('public')->url($siteSettings->logo);
         } else {
             $ogImage = null;
         }
@@ -98,7 +98,7 @@
 
     {{-- Favicon --}}
     @if(!empty($siteSettings->favicon))
-        <link rel="icon" href="{{ asset('storage/' . $siteSettings->favicon) }}">
+        <link rel="icon" href="{{ \Illuminate\Support\Facades\Storage::disk('public')->url($siteSettings->favicon) }}">
     @endif
 
     {{-- Google Site Verification --}}

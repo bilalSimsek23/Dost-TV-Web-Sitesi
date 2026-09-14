@@ -172,7 +172,7 @@
                                         if (str_starts_with($rawImg, 'http://') || str_starts_with($rawImg, 'https://')) {
                                             $imgSrc = $rawImg;
                                         } else {
-                                            $imgSrc = asset('storage/' . $rawImg);
+                                            $imgSrc = \Illuminate\Support\Facades\Storage::disk('public')->url($rawImg);
                                         }
                                     }
                                 @endphp

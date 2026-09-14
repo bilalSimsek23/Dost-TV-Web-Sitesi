@@ -52,7 +52,12 @@ return [
             // every existing "programs/xxx.png"-style path already in the DB),
             // so only set it for the local driver.
             'root' => env('PUBLIC_DISK_DRIVER', 'local') === 'local' ? storage_path('app/public') : null,
-            'url' => env('AWS_URL', rtrim(env('APP_URL', 'http://localhost'), '/').'/storage'),
+            // Must also switch on the driver, not just on whether AWS_URL happens
+            // to be set - otherwise local dev would generate Cloud bucket URLs for
+            // files it is actually serving from its own local /storage symlink.
+            'url' => env('PUBLIC_DISK_DRIVER', 'local') === 'local'
+                ? rtrim(env('APP_URL', 'http://localhost'), '/').'/storage'
+                : env('AWS_URL'),
             // Cloudflare R2 (what Laravel Cloud Object Storage runs on) manages
             // visibility at the bucket level and rejects per-object ACL requests
             // with a "NotImplemented" error, so this must only be set for local.

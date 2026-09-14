@@ -16,7 +16,7 @@
             if (str_starts_with($coverImage, 'http') || str_starts_with($coverImage, 'livewire-file:') || str_starts_with($coverImage, 'tmp/')) {
                 $imageUrl = $coverImage;
             } else {
-                $imageUrl = asset('storage/' . $coverImage);
+                $imageUrl = \Illuminate\Support\Facades\Storage::disk('public')->url($coverImage);
             }
         } elseif (is_object($coverImage) && method_exists($coverImage, 'temporaryUrl')) {
             try {

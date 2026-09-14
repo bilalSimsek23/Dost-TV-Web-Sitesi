@@ -17,6 +17,7 @@ use Filament\Schemas\Schema;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\HtmlString;
 use Illuminate\Support\Str;
 
@@ -50,7 +51,7 @@ class EpisodesRelationManager extends RelationManager
                     ->formatStateUsing(function ($state, Episode $record) {
                         $imgUrl = null;
                         if (filled($state)) {
-                            $imgUrl = Str::startsWith($state, ['http://', 'https://']) ? $state : asset('storage/' . $state);
+                            $imgUrl = Str::startsWith($state, ['http://', 'https://']) ? $state : Storage::disk('public')->url($state);
                         } else {
                             $vId = Youtube::extractVideoId($record->youtube_url);
                             if ($vId) {
