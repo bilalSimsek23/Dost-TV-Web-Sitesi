@@ -41,6 +41,12 @@ class EpisodesTable
     protected static function configureGroupedMainTable(Table $table): Table
     {
         return $table
+            ->defaultSort('last_aired_at', 'desc')
+            // This table's query is a manual GROUP BY aggregate (see modifyQueryUsing
+            // below), so Filament's automatic "order by <table>.id" tie-breaker is
+            // invalid under MySQL's ONLY_FULL_GROUP_BY: `id` here only exists as the
+            // aggregated `MIN(id) as id` alias, not a raw groupable column.
+            ->defaultKeySort(false)
             ->recordUrl(function (Episode $record) {
                 $url = '/admin/episodes?program_id=' . $record->program_id . '&season_number=' . ($record->season_number ?? 'none');
                 if (filled($record->season_year)) {
