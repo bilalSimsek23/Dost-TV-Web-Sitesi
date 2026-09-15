@@ -23,19 +23,24 @@ class ScheduleCalendarService
 
     public function getActiveOrSelectedTemplate(?int $templateId = null): ?ScheduleTemplate
     {
+        // Note: 'versionHistories' is intentionally not eager-loaded here - it is
+        // not displayed or used anywhere on this page, and its snapshot_data
+        // column can be large enough (100s of KB per row) that sorting it via
+        // the relation's default orderBy('version_number', 'desc') can exceed
+        // MySQL's sort buffer ("Out of sort memory") on every page load.
         if ($templateId) {
-            $template = ScheduleTemplate::with(['items.program', 'versionHistories'])->find($templateId);
+            $template = ScheduleTemplate::with(['items.program'])->find($templateId);
             if ($template) {
                 return $template;
             }
         }
 
-        return ScheduleTemplate::with(['items.program', 'versionHistories'])
+        return ScheduleTemplate::with(['items.program'])
             ->where('status', 'published')
             ->where('is_active', true)
             ->orderBy('priority', 'desc')
             ->first()
-            ?: ScheduleTemplate::with(['items.program', 'versionHistories'])->first();
+            ?: ScheduleTemplate::with(['items.program'])->first();
     }
 
     public function getDayCounts(ScheduleTemplate $template): array
